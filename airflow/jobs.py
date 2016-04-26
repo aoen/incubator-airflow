@@ -35,6 +35,8 @@ from sqlalchemy.orm.session import make_transient
 from airflow import executors, models, settings
 from airflow import configuration as conf
 from airflow.exceptions import AirflowException
+from airflow.ti_deps.contexts.backfill_context import BackfillContext
+from airflow.ti_deps.contexts.base_dep_context import BaseDepContext
 from airflow.utils.state import State
 from airflow.utils.db import provide_session, pessimistic_connection_handling
 from airflow.utils.email import send_email
@@ -319,8 +321,6 @@ class SchedulerJob(BaseJob):
                     session.delete(ti)
                     session.commit()
 
-            blocking_tis = ([ti for ti in blocking_tis
-                            if ti.are_dependencies_met(session=session)])
             task_list = "\n".join([
                 sla.task_id + ' on ' + sla.execution_date.isoformat()
                 for sla in slas])
@@ -383,6 +383,13 @@ class SchedulerJob(BaseJob):
         for a DAG based on scheduling interval
         Returns DagRun if one is scheduled. Otherwise returns None.
         """
+        # TODO(aoen): The checking logic should be factored out into a pure function:
+        # should_schedule_dag, this function should then be used by ti_deps so that a task
+        # instance "knows" that it is blocked by it's respective DagRun's dependencies not
+        # being met, which is important for e.g. reporting that a task instance is blocked
+        # on it's DagRun in the web UI to users. The execution date logic here is already
+        # picked up by the ExecDateDep so this logic in ExecDateDep should be removed when
+        # this refactor is complete.
         if dag.schedule_interval:
             DagRun = models.DagRun
             session = settings.Session()
@@ -490,6 +497,9 @@ class SchedulerJob(BaseJob):
             session.commit()
 
         active_runs = dag.get_active_runs()
+        # TODODAN
+        self.logger.info("ACTIVE")
+        self.logger.info(active_runs)
 
         self.logger.info('Getting list of tasks to skip for active runs.')
         skip_tis = set()
@@ -505,6 +515,9 @@ class SchedulerJob(BaseJob):
             skip_tis = {(ti[0], ti[1]) for ti in qry.all()}
 
         descartes = [obj for obj in product(dag.tasks, active_runs)]
+        # TODODAN
+        self.logger.info("DESCARTES")
+        self.logger.info(descartes)
         could_not_run = set()
         self.logger.info('Checking dependencies on {} tasks instances, minus {} '
                      'skippable ones'.format(len(descartes), len(skip_tis)))
@@ -513,16 +526,22 @@ class SchedulerJob(BaseJob):
             if task.adhoc or (task.task_id, dttm) in skip_tis:
                 continue
             ti = TI(task, dttm)
+            # TODODAN
+            self.logger.info("TI1!")
+            self.logger.info(ti)
 
             ti.refresh_from_db()
             if ti.state in (
                     State.RUNNING, State.QUEUED, State.SUCCESS, State.FAILED):
                 continue
-            elif ti.is_runnable(flag_upstream_failed=True):
+            elif ti.are_dependencies_met(
+                    dep_context=BaseDepContext(flag_upstream_failed=True),
+                    session=session):
                 self.logger.debug('Queuing task: {}'.format(ti))
+                # TODODAN
+                self.logger.info("TI2!")
+                self.logger.info(ti)
                 queue.put((ti.key, pickle_id))
-            elif ti.is_premature():
-                continue
             else:
                 self.logger.debug('Adding task: {} to the COULD_NOT_RUN set'.format(ti))
                 could_not_run.add(ti)
@@ -584,7 +603,6 @@ class SchedulerJob(BaseJob):
             else:
                 d[ti.pool].append(ti)
 
-        dag_blacklist = set(dagbag.paused_dags())
         for pool, tis in list(d.items()):
             if not pool:
                 # Arbitrary:
@@ -627,12 +645,7 @@ class SchedulerJob(BaseJob):
                     self.logger.info("Pickling DAG {}".format(dag))
                     pickle_id = dag.pickle(session).id
 
-                if dag.dag_id in dag_blacklist:
-                    continue
-                if dag.concurrency_reached:
-                    dag_blacklist.add(dag.dag_id)
-                    continue
-                if ti.are_dependencies_met():
+                if ti.are_dependencies_met(session=session):
                     executor.queue_task_instance(ti, pickle_id=pickle_id)
                     open_slots -= 1
                 else:
@@ -705,9 +718,18 @@ class SchedulerJob(BaseJob):
                         dag for dag in dagbag.dags.values()
                         if not dag.parent_dag]
 
+                # TODO(aoen): the logic here to figure out which DAGs to run is not
+                # coupled to the logic of the RunContext for task instances.
+                # What this means is that for example if a condition to gate a DAG's
+                # execution is added here but not in the RunContext, task instances will
+                # not be "aware" of why they aren't scheduled (e.g. the view that explains
+                # why a task instance isn't running will not reflect the conditions here).
+                # Ideally we would have contexts for dagruns in addition to task
+                # instances and the task instance contexts would check the dagrun contexts
+                # to see if their conditions are met (e.g. the dag is not paused). This
+                # would create the required coupling.
                 paused_dag_ids = dagbag.paused_dags()
                 dags = [x for x in dags if x.dag_id not in paused_dag_ids]
-                # dags = filter(lambda x: x.dag_id not in paused_dag_ids, dags)
 
                 self.logger.debug("Total Cores: {} Max Threads: {} DAGs:{}".
                                   format(multiprocessing.cpu_count(),
@@ -777,11 +799,14 @@ class BackfillJob(BaseJob):
 
     def __init__(
             self,
-            dag, start_date=None, end_date=None, mark_success=False,
+            dag,
+            start_date=None,
+            end_date=None,
+            mark_success=False,
             include_adhoc=False,
             donot_pickle=False,
-            ignore_dependencies=False,
             ignore_first_depends_on_past=False,
+            ignore_task_deps=False,
             pool=None,
             *args, **kwargs):
         self.dag = dag
@@ -791,8 +816,8 @@ class BackfillJob(BaseJob):
         self.mark_success = mark_success
         self.include_adhoc = include_adhoc
         self.donot_pickle = donot_pickle
-        self.ignore_dependencies = ignore_dependencies
         self.ignore_first_depends_on_past = ignore_first_depends_on_past
+        self.ignore_task_deps = ignore_task_deps
         self.pool = pool
         super(BackfillJob, self).__init__(*args, **kwargs)
 
@@ -845,12 +870,17 @@ class BackfillJob(BaseJob):
             for key, ti in list(tasks_to_run.items()):
 
                 ti.refresh_from_db()
+
                 ignore_depends_on_past = (
                     self.ignore_first_depends_on_past and
                     ti.execution_date == (start_date or ti.start_date))
 
                 # The task was already marked successful or skipped by a
                 # different Job. Don't rerun it.
+                # TODO(aoen): This logic should be moved into are_dependencies_met, to
+                # accomplish this a "started" member variable should be added to the
+                # BackfillContext and a new dependency class should be added to this
+                # context to check this state
                 if key not in started:
                     if ti.state == State.SUCCESS:
                         succeeded.add(key)
@@ -861,21 +891,22 @@ class BackfillJob(BaseJob):
                         tasks_to_run.pop(key)
                         continue
 
+                backfill_context = BackfillContext(
+                    ignore_depends_on_past=ignore_depends_on_past,
+                    ignore_task_deps=self.ignore_task_deps)
                 # Is the task runnable? -- then run it
-                if ti.is_queueable(
-                        include_queued=True,
-                        ignore_depends_on_past=ignore_depends_on_past,
-                        flag_upstream_failed=True):
+                if ti.are_dependencies_met(dep_context=backfill_context,
+                                           session=session,
+                                           verbose=True):
                     self.logger.debug('Sending {} to executor'.format(ti))
                     executor.queue_task_instance(
                         ti,
                         mark_success=self.mark_success,
                         pickle_id=pickle_id,
-                        ignore_dependencies=self.ignore_dependencies,
+                        ignore_task_deps=self.ignore_task_deps,
                         ignore_depends_on_past=ignore_depends_on_past,
                         pool=self.pool)
                     started.add(key)
-
                 # Mark the task as not ready to run
                 elif ti.state in (State.NONE, State.UPSTREAM_FAILED):
                     not_ready.add(key)
@@ -1005,8 +1036,14 @@ class BackfillJob(BaseJob):
                 '---------------------------------------------------\n'
                 'BackfillJob is deadlocked.')
             deadlocked_depends_on_past = any(
-                t.are_dependencies_met() != t.are_dependencies_met(
-                    ignore_depends_on_past=True)
+                t.are_dependencies_met(
+                    dep_context=BaseDepContext(ignore_depends_on_past=False),
+                    session=session,
+                    verbose=True) !=
+                t.are_dependencies_met(
+                    dep_context=BaseDepContext(ignore_depends_on_past=True),
+                    session=session,
+                    verbose=True)
                 for t in deadlocked)
             if deadlocked_depends_on_past:
                 err += (
@@ -1031,17 +1068,19 @@ class LocalTaskJob(BaseJob):
     def __init__(
             self,
             task_instance,
-            ignore_dependencies=False,
+            ignore_all_deps=False,
             ignore_depends_on_past=False,
-            force=False,
+            ignore_task_deps=False,
+            ignore_ti_state=False,
             mark_success=False,
             pickle_id=None,
             pool=None,
             *args, **kwargs):
         self.task_instance = task_instance
-        self.ignore_dependencies = ignore_dependencies
+        self.ignore_all_deps = ignore_all_deps
         self.ignore_depends_on_past = ignore_depends_on_past
-        self.force = force
+        self.ignore_task_deps = ignore_task_deps
+        self.ignore_ti_state = ignore_ti_state
         self.pool = pool
         self.pickle_id = pickle_id
         self.mark_success = mark_success
@@ -1050,9 +1089,10 @@ class LocalTaskJob(BaseJob):
     def _execute(self):
         command = self.task_instance.command(
             raw=True,
-            ignore_dependencies=self.ignore_dependencies,
+            ignore_all_deps=self.ignore_all_deps,
             ignore_depends_on_past=self.ignore_depends_on_past,
-            force=self.force,
+            ignore_task_deps=self.ignore_task_deps,
+            ignore_ti_state=self.ignore_ti_state,
             pickle_id=self.pickle_id,
             mark_success=self.mark_success,
             job_id=self.id,
