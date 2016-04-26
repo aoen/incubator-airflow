@@ -643,7 +643,7 @@ Documentation & Notes
 =====================
 
 It's possible to add documentation or notes to your dags & task objects that
-become visible in the web interface ("Graph View" for dags, "Task Details" for
+become visible in the web interface ("Graph View" for dags, "Task Instance Details" for
 tasks). There are a set of special task attributes that get rendered as rich
 content if defined:
 
@@ -678,7 +678,7 @@ to the related tasks in Airflow.
     """
 
 This content will get rendered as markdown respectively in the "Graph View" and
-"Task Details" pages.
+"Task Instance Details" pages.
 
 Jinja Templating
 ================

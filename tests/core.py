@@ -293,7 +293,7 @@ class CoreTest(unittest.TestCase):
             task_id='time_sensor_check',
             target_time=time(0),
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_check_operators(self):
 
@@ -308,7 +308,7 @@ class CoreTest(unittest.TestCase):
             sql="select count(*) from operator_test_table",
             conn_id=conn_id,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         t = operators.ValueCheckOperator(
             task_id='value_check',
@@ -317,7 +317,7 @@ class CoreTest(unittest.TestCase):
             conn_id=conn_id,
             sql="SELECT 100",
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         captainHook.run("drop table operator_test_table")
 
@@ -350,7 +350,7 @@ class CoreTest(unittest.TestCase):
             task_id='time_sensor_check',
             bash_command="echo success",
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_bash_operator_multi_byte_output(self):
         t = operators.BashOperator(
@@ -358,7 +358,7 @@ class CoreTest(unittest.TestCase):
             bash_command=u"echo \u2600",
             dag=self.dag,
             output_encoding='utf-8')
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_trigger_dagrun(self):
         def trigga(context, obj):
@@ -370,7 +370,7 @@ class CoreTest(unittest.TestCase):
             trigger_dag_id='example_bash_operator',
             python_callable=trigga,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_dryrun(self):
         t = operators.BashOperator(
@@ -384,14 +384,14 @@ class CoreTest(unittest.TestCase):
             task_id='time_sqlite',
             sql="CREATE TABLE IF NOT EXISTS unitest (dummy VARCHAR(20))",
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_timedelta_sensor(self):
         t = operators.TimeDeltaSensor(
             task_id='timedelta_sensor_check',
             delta=timedelta(seconds=2),
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_external_task_sensor(self):
         t = operators.ExternalTaskSensor(
@@ -399,7 +399,7 @@ class CoreTest(unittest.TestCase):
             external_dag_id=TEST_DAG_ID,
             external_task_id='time_sensor_check',
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_external_task_sensor_delta(self):
         t = operators.ExternalTaskSensor(
@@ -409,7 +409,7 @@ class CoreTest(unittest.TestCase):
             execution_delta=timedelta(0),
             allowed_states=['success'],
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_timeout(self):
         t = operators.PythonOperator(
@@ -420,7 +420,7 @@ class CoreTest(unittest.TestCase):
         self.assertRaises(
             exceptions.AirflowTaskTimeout,
             t.run,
-            start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_python_op(self):
         def test_py_op(templates_dict, ds, **kwargs):
@@ -433,7 +433,7 @@ class CoreTest(unittest.TestCase):
             python_callable=test_py_op,
             templates_dict={'ds': "{{ ds }}"},
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_complex_template(self):
         class OperatorSubclass(operators.BaseOperator):
@@ -458,7 +458,7 @@ class CoreTest(unittest.TestCase):
             },
             on_success_callback=test_some_templated_field_template_render,
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     def test_import_examples(self):
         self.assertEqual(len(self.dagbag.dags), NUM_EXAMPLE_DAGS)
@@ -467,7 +467,7 @@ class CoreTest(unittest.TestCase):
         TI = models.TaskInstance
         ti = TI(
             task=self.runme_0, execution_date=DEFAULT_DATE)
-        job = jobs.LocalTaskJob(task_instance=ti, force=True)
+        job = jobs.LocalTaskJob(task_instance=ti, ignore_ti_state=True)
         job.run()
 
     def test_scheduler_job(self):
@@ -479,7 +479,7 @@ class CoreTest(unittest.TestCase):
         ti = TI(
             task=self.runme_0, execution_date=DEFAULT_DATE)
         ti.dag = self.dag_bash
-        ti.run(force=True)
+        ti.run(ignore_ti_state=True)
 
     def test_doctests(self):
         modules = [utils, macros]
@@ -869,8 +869,9 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/run?task_id=runme_0&"
-            "dag_id=example_bash_operator&force=true&deps=true&"
-            "execution_date={}&origin=/admin".format(DEFAULT_DATE_DS))
+            "dag_id=example_bash_operator&ignore_all_deps=false&ignore_ti_state=true&"
+            "ignore_task_deps=true&execution_date={}&"
+            "origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")
@@ -909,7 +910,7 @@ class WebUiTests(unittest.TestCase):
         TI = models.TaskInstance
         ti = TI(
             task=self.runme_0, execution_date=DEFAULT_DATE)
-        job = jobs.LocalTaskJob(task_instance=ti, force=True)
+        job = jobs.LocalTaskJob(task_instance=ti, ignore_ti_state=True)
         job.run()
 
         response = self.app.get(url)
@@ -1094,7 +1095,7 @@ if 'MySqlOperator' in dir(operators):
                 sql=sql,
                 mysql_conn_id='airflow_db',
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def mysql_operator_test_multi(self):
             sql = [
@@ -1105,7 +1106,7 @@ if 'MySqlOperator' in dir(operators):
                 task_id='mysql_operator_test_multi',
                 mysql_conn_id='airflow_db',
                 sql=sql, dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_mysql_to_mysql(self):
             sql = "SELECT * FROM INFORMATION_SCHEMA.TABLES LIMIT 100;"
@@ -1121,7 +1122,7 @@ if 'MySqlOperator' in dir(operators):
                 destination_table="test_mysql_to_mysql",
                 sql=sql,
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_sql_sensor(self):
             t = operators.SqlSensor(
@@ -1129,7 +1130,7 @@ if 'MySqlOperator' in dir(operators):
                 conn_id='mysql_default',
                 sql="SELECT count(1) FROM INFORMATION_SCHEMA.TABLES",
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 if 'PostgresOperator' in dir(operators):
     # Only testing if the operator is installed
@@ -1148,7 +1149,7 @@ if 'PostgresOperator' in dir(operators):
             """
             t = operators.PostgresOperator(
                 task_id='basic_postgres', sql=sql, dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
             autocommitTask = operators.PostgresOperator(
                 task_id='basic_postgres_with_autocommit',
@@ -1158,7 +1159,7 @@ if 'PostgresOperator' in dir(operators):
             autocommitTask.run(
                 start_date=DEFAULT_DATE,
                 end_date=DEFAULT_DATE,
-                force=True)
+                ignore_ti_state=True)
 
 class FakeSession(object):
     def __init__(self):
@@ -1189,7 +1190,7 @@ class HttpOpSensorTest(unittest.TestCase):
             data={"client": "ubuntu", "q": "airflow"},
             headers={},
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     @mock.patch('requests.Session', FakeSession)
     def test_get_response_check(self):
@@ -1201,7 +1202,7 @@ class HttpOpSensorTest(unittest.TestCase):
             response_check=lambda response: ("airbnb/airflow" in response.text),
             headers={},
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
     @mock.patch('requests.Session', FakeSession)
     def test_sensor(self):
@@ -1215,7 +1216,7 @@ class HttpOpSensorTest(unittest.TestCase):
             poke_interval=5,
             timeout=15,
             dag=self.dag)
-        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 class FakeWebHDFSHook(object):
     def __init__(self, conn_id):
@@ -1504,7 +1505,7 @@ if 'MySqlOperator' in dir(operators) and 'HiveOperator' in dir(operators):
                 recreate=True,
                 delimiter=",",
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_mysql_to_hive_partition(self):
             from airflow.operators.mysql_to_hive import MySqlToHiveTransfer
@@ -1520,7 +1521,7 @@ if 'MySqlOperator' in dir(operators) and 'HiveOperator' in dir(operators):
                 create=True,
                 delimiter=",",
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 if 'AIRFLOW_RUNALL_TESTS' in os.environ:
 
@@ -1549,7 +1550,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
         def test_hive(self):
             t = operators.HiveOperator(
                 task_id='basic_hql', hql=self.hql, dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_hive_dryrun(self):
             t = operators.HiveOperator(
@@ -1560,7 +1561,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
             t = operators.HiveOperator(
                 task_id='beeline_hql', hive_cli_conn_id='beeline_default',
                 hql=self.hql, dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_presto(self):
             sql = """
@@ -1568,7 +1569,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
             """
             t = operators.PrestoCheckOperator(
                 task_id='presto_check', sql=sql, dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 
     def test_presto_to_mysql(self):
@@ -1582,7 +1583,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
             mysql_table='test_static_babynames',
             mysql_preoperator='TRUNCATE TABLE test_static_babynames;',
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 
     def test_presto_to_mysql(self):
@@ -1596,14 +1597,14 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
             mysql_table='test_static_babynames',
             mysql_preoperator='TRUNCATE TABLE test_static_babynames;',
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_hdfs_sensor(self):
             t = operators.HdfsSensor(
                 task_id='hdfs_sensor_check',
                 filepath='hdfs://user/hive/warehouse/airflow.db/static_babynames',
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_webhdfs_sensor(self):
             t = operators.WebHdfsSensor(
@@ -1611,7 +1612,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 filepath='hdfs://user/hive/warehouse/airflow.db/static_babynames',
                 timeout=120,
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_sql_sensor(self):
             t = operators.SqlSensor(
@@ -1619,7 +1620,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 conn_id='presto_default',
                 sql="SELECT 'x' FROM airflow.static_babynames LIMIT 1;",
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_hive_stats(self):
             t = operators.HiveStatsCollectionOperator(
@@ -1627,14 +1628,14 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 table="airflow.static_babynames_partitioned",
                 partition={'ds': DEFAULT_DATE_DS},
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_hive_partition_sensor(self):
             t = operators.HivePartitionSensor(
                 task_id='hive_partition_check',
                 table='airflow.static_babynames_partitioned',
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_hive_metastore_sql_sensor(self):
             t = operators.MetastorePartitionSensor(
@@ -1642,7 +1643,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 table='airflow.static_babynames_partitioned',
                 partition_name='ds={}'.format(DEFAULT_DATE_DS),
                 dag=self.dag)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
         def test_hive2samba(self):
             if 'Hive2SambaOperator' in dir(operators):
@@ -1652,7 +1653,10 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                     hql="SELECT * FROM airflow.static_babynames LIMIT 10000",
                     destination_filepath='test_airflow.csv',
                     dag=self.dag)
-                t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+                t.run(
+                    start_date=DEFAULT_DATE,
+                    end_date=DEFAULT_DATE,
+                    ignore_ti_state=True)
 
         def test_hive_to_mysql(self):
             t = operators.HiveToMySqlTransfer(
@@ -1671,7 +1675,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 ],
                 dag=self.dag)
             t.clear(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
-            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
 
 if __name__ == '__main__':
     unittest.main()
