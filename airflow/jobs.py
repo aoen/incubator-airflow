@@ -307,8 +307,6 @@ class SchedulerJob(BaseJob):
                     session.delete(ti)
                     session.commit()
 
-            blocking_tis = ([ti for ti in blocking_tis
-                            if ti.are_dependencies_met(session=session)])
             task_list = "\n".join([
                 sla.task_id + ' on ' + sla.execution_date.isoformat()
                 for sla in slas])
@@ -743,12 +741,16 @@ class BackfillJob(BaseJob):
         'polymorphic_identity': 'BackfillJob'
     }
 
+    # add a todo to the ignore_dependencies command line option name saying it should be deprecated and renamed to force
     def __init__(
             self,
-            dag, start_date=None, end_date=None, mark_success=False,
+            dag,
+            start_date=None,
+            end_date=None,
+            mark_success=False,
             include_adhoc=False,
             donot_pickle=False,
-            ignore_dependencies=False,
+            force=False,
             ignore_first_depends_on_past=False,
             pool=None,
             *args, **kwargs):
@@ -759,7 +761,7 @@ class BackfillJob(BaseJob):
         self.mark_success = mark_success
         self.include_adhoc = include_adhoc
         self.donot_pickle = donot_pickle
-        self.ignore_dependencies = ignore_dependencies
+        self.force = force
         self.ignore_first_depends_on_past = ignore_first_depends_on_past
         self.pool = pool
         super(BackfillJob, self).__init__(*args, **kwargs)
@@ -813,12 +815,20 @@ class BackfillJob(BaseJob):
             for key, ti in list(tasks_to_run.items()):
 
                 ti.refresh_from_db()
+
                 ignore_depends_on_past = (
                     self.ignore_first_depends_on_past and
                     ti.execution_date == (start_date or ti.start_date))
 
+                exec_context = models.BackfillExecContext(
+                    ignore_depends_on_past=ignore_depends_on_past,
+                    force=self.force)
+
                 # The task was already marked successful or skipped by a
                 # different Job. Don't rerun it.
+                # TODO(aoen): This logic should be moved into are_dependencies_met, to
+                # accomplish this the BackfillContext should have a reference to "started"
+                # and a new dependency should be added to check it.
                 if key not in started:
                     if ti.state == State.SUCCESS:
                         succeeded.add(key)
@@ -830,17 +840,14 @@ class BackfillJob(BaseJob):
                         continue
 
                 # Is the task runnable? -- then run it
-                if ti.are_dependencies_met(
-                        include_queued=True,
-                        ignore_depends_on_past=ignore_depends_on_past,
-                        flag_upstream_failed=True):
+                if ti.are_dependencies_met(exec_context=exec_context):
                     self.logger.debug('Sending {} to executor'.format(ti))
                     executor.queue_task_instance(
                         ti,
                         mark_success=self.mark_success,
                         pickle_id=pickle_id,
-                        ignore_dependencies=self.ignore_dependencies,
-                        ignore_depends_on_past=ignore_depends_on_past,
+                        force=self.force,
+                        ignore_first_depends_on_past=ignore_first_depends_on_past,
                         pool=self.pool)
                     started.add(key)
 
@@ -999,7 +1006,6 @@ class LocalTaskJob(BaseJob):
     def __init__(
             self,
             task_instance,
-            ignore_dependencies=False,
             ignore_depends_on_past=False,
             force=False,
             mark_success=False,
@@ -1007,7 +1013,6 @@ class LocalTaskJob(BaseJob):
             pool=None,
             *args, **kwargs):
         self.task_instance = task_instance
-        self.ignore_dependencies = ignore_dependencies
         self.ignore_depends_on_past = ignore_depends_on_past
         self.force = force
         self.pool = pool
@@ -1018,7 +1023,6 @@ class LocalTaskJob(BaseJob):
     def _execute(self):
         command = self.task_instance.command(
             raw=True,
-            ignore_dependencies=self.ignore_dependencies,
             ignore_depends_on_past=self.ignore_depends_on_past,
             force=self.force,
             pickle_id=self.pickle_id,

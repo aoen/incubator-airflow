@@ -59,12 +59,12 @@ from airflow import configuration
 from airflow.exceptions import AirflowException, AirflowSkipException
 from airflow.ti_deps.ti_deps import (
     DagUnpausedDep,
-    EndDateAfterExecutionDateDep,
-    ExecDateNotInFutureDep,
+    ExecDateDep,
     InRunnableStateDep,
-    MaxConcurrencyNotReachedDep,
-    MaxDagrunsNotReachedDep,
-    NotAlreadyQueuedDep,
+    NotRunningDep,
+    MaxConcurrencyDep,
+    MaxDagrunsDep,
+    NotQueuedDep,
     NotInRetryPeriodDep,
     NotSkippedDep,
     PastDagrunDep,
@@ -626,6 +626,107 @@ class DagPickle(Base):
         self.pickle = dag
 
 
+# TODODAN docstring and such (that this is an abstract class)
+class TaskExecContext(object):
+    # The dependencies for each task instance that need to be met before the
+    # instance is
+    # run
+
+    REQUIRED_DEPS = {
+        # TODODAN We don't want to ignore taskinstances that are already running to avoid
+        # double-triggering of taskinstances
+        NotRunningDep(),
+    }
+
+    OPTIONAL_DEPS = {
+        DagUnpausedDep(),
+        ExecDateDep(),
+        InRunnableStateDep(),
+        MaxConcurrencyDep(),
+        MaxDagrunsDep(),
+        NotQueuedDep(),
+        NotSkippedDep(),
+        PoolHasSpaceDep(),
+    }
+
+    # TODODAN add a todo explaining flag_upstream_failed is a hack from leftover days (and that we shouldn't modify state here)
+    # TODODAN @property all of these things (should not be able to overwrite them), same for all superclasses of this
+    def __init__(
+            self,
+            ignore_depends_on_past=False,
+            flag_upstream_failed=False):
+        self.ignore_depends_on_past = ignore_depends_on_past
+        self.flag_upstream_failed = flag_upstream_failed
+
+    # TODODAN tell people this is what you should override this if you want
+    def _get_optional_deps(self, task):
+        return self.OPTIONAL_DEPS | task.deps
+
+    # TODODAN comment that this should NOT be ovverriden by superclasses
+    def deps_for_task(self, task):
+        return self.REQUIRED_DEPS | self._get_optional_deps(task)
+
+
+# TODODAN commetns and docstring
+class NoContext(TaskExecContext):
+    def deps_for_task(self, task):
+        return task.deps
+
+
+# TODODAN comments and docstring
+# TODO(aoen): At some point backfilling should use the scheduler. At this point this class
+# should be removed.
+class BackfillExecContext(TaskExecContext):
+    def __init__(self, ignore_depends_on_past, force):
+        super(BackfillExecContext, self).__init__(
+            ignore_depends_on_past=ignore_depends_on_past,
+            flag_upstream_failed=True)
+        self.force = force
+
+    def _get_optional_deps(self, task):
+        if self.force:
+            return {}
+
+        # TODODAN explain why ignore notqueueddep
+        return (super(BackfillExecContext, self)._get_optional_deps(task)
+                .remove(NotQueuedDep))
+
+
+# TODODAN comments and docstring, explain this is where the task instance actually gets run
+class ExecutionExecContext(TaskExecContext):
+    def __init__(self, force):
+        super(BackfillExecContext, self).__init__()
+        self.force = force
+
+    def _get_optional_deps(self, task):
+        if self.force:
+            return {}
+
+        return super(ExecutionExecContext, self)._get_optional_deps(task)
+
+
+# TODODAN comments and docstring
+# TODODAN RunExec vs Execution exec is  confusing, use clearer names for these
+class RunExecContext(TaskExecContext):
+    def __init__(self, ignore_depends_on_past, force):
+        super(RunExecContext, self).__init__(
+            ignore_depends_on_past=ignore_depends_on_past,
+            flag_upstream_failed=True)
+        self.force = force
+
+    def _get_optional_deps(self, task):
+        if self.force:
+            return {}
+
+        return super(RunExecContext, self)._get_optional_deps(task)
+
+
+# TODODAN comments and docstring
+class SchedulerExecContext(TaskExecContext):
+    def __init__(self):
+        super(SchedulerExecContext, self).__init__()
+
+
 class TaskInstance(Base):
     """
     Task instances store the state of a task instance. This table is the
@@ -665,23 +766,6 @@ class TaskInstance(Base):
         Index('ti_pool', pool, state, priority_weight),
     )
 
-    # The dependencies for each task instance that need to be met before the instance is
-    # run
-    TI_DEPS = [
-        PoolHasSpaceDep,
-        ExecDateNotInFutureDep,
-        NotInRetryPeriodDep,
-        EndDateAfterExecutionDateDep,
-        NotAlreadyQueuedDep,
-        InRunnableStateDep,
-        DagUnpausedDep,
-        MaxConcurrencyNotReachedDep,
-        MaxDagrunsNotReachedDep,
-        NotSkippedDep,
-        PastDagrunDep,
-        TriggerRuleDep,
-    ]
-
     def __init__(self, task, execution_date, state=None):
         self.dag_id = task.dag_id
         self.task_id = task.task_id
@@ -700,14 +784,12 @@ class TaskInstance(Base):
     def init_on_load(self):
         """ Initialize the attributes that aren't stored in the DB. """
         self.test_mode = False  # can be changed when calling 'run'
-        self.force = False  # can be changed when calling 'run'
 
     def command(
             self,
             mark_success=False,
-            ignore_dependencies=False,
-            ignore_depends_on_past=False,
             force=False,
+            ignore_depends_on_past=False,
             local=False,
             pickle_id=None,
             raw=False,
@@ -724,7 +806,6 @@ class TaskInstance(Base):
         cmd += "--mark_success " if mark_success else ""
         cmd += "--pickle {pickle_id} " if pickle_id else ""
         cmd += "--job_id {job_id} " if job_id else ""
-        cmd += "-i " if ignore_dependencies else ""
         cmd += "-I " if ignore_depends_on_past else ""
         cmd += "--force " if force else ""
         cmd += "--local " if local else ""
@@ -882,9 +963,8 @@ class TaskInstance(Base):
     @provide_session
     def are_dependencies_met(
             self,
+            exec_context=NoContext(),
             session=None,
-            include_queued=False,
-            ignore_depends_on_past=False,
             flag_upstream_failed=False,
             verbose=False):
         """
@@ -895,32 +975,23 @@ class TaskInstance(Base):
             whether the task instance is runnable. It was the shortest
             path to add the feature
         :type flag_upstream_failed: boolean
-        :param include_queued: If True, tasks that have already been queued
-            are included. Defaults to False.
-        :type include_queued: boolean
-        :param ignore_depends_on_past: if True, ignores depends_on_past
-            dependencies. Defaults to False.
-        :type ignore_depends_on_past: boolean
         :param verbose: verbose provides more logging in the case where the
             task instance is evaluated as a check right before being executed.
             In the case of the scheduler evaluating the dependencies, this
             logging would be way too verbose.
         :type verbose: boolean
         """
+        # TODODAN remove verbose=
         verbose = True
-        for dep in self.TI_DEPS:
-            for dep_status in dep.get_failed_dep_statuses(
-                                  self,
-                                  session,
-                                  include_queued,
-                                  ignore_depends_on_past,
-                                  flag_upstream_failed):
-                if verbose:
-                    logging.warning(
-                        "Task instance {0} dependencies not met, dependency {1} failed: "
-                        "{2}".format(self, dep_status.dep_name, dep_status.reason))
-                session.commit()
-                return False
+        for dep_status in self.get_failed_dep_statuses(
+                                exec_context=exec_context,
+                                session=session):
+            if verbose:
+                logging.warning(
+                    "Task instance {0} dependencies not met, dependency {1} failed: "
+                    "{2}".format(self, dep_status.dep_name, dep_status.reason))
+            session.commit()
+            return False
 
         session.commit()
         return True
@@ -928,18 +999,13 @@ class TaskInstance(Base):
     @provide_session
     def get_failed_dep_statuses(
             self,
-            session=None,
-            include_queued=False,
-            ignore_depends_on_past=False,
-            flag_upstream_failed=False):
-
-        for dep in self.TI_DEPS:
+            exec_context=NoContext(),
+            session=None):
+        for dep in exec_context.deps_for_task(self.task):
             for dep_status in dep.get_dep_statuses(
                                   self,
                                   session,
-                                  include_queued,
-                                  ignore_depends_on_past,
-                                  flag_upstream_failed):
+                                  exec_context):
                 if not dep_status.passed:
                     yield dep_status
 
@@ -984,7 +1050,6 @@ class TaskInstance(Base):
     def run(
             self,
             verbose=True,
-            ignore_dependencies=False,  # Doesn't check for deps, just runs
             ignore_depends_on_past=False,   # Ignore depends_on_past but respect
                                             # other deps
             force=False,  # Disregards previous successes
@@ -1003,15 +1068,16 @@ class TaskInstance(Base):
         self.refresh_from_db()
         self.clear_xcom_data()
         self.job_id = job_id
-        iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
         self.operator = task.__class__.__name__
 
-        if (not ignore_dependencies and
-            not self.are_dependencies_met(
+        exec_context = RunExecContext(
+            force=force,
+            ignore_depends_on_past=ignore_depends_on_past)
+        if not self.are_dependencies_met(
+                exec_context=exec_context,
                 session=session,
-                ignore_depends_on_past=ignore_depends_on_past,
-                verbose=True)):
+                verbose=True):
             logging.warning("Dependencies not met yet")
             session.commit()
             return
@@ -1026,6 +1092,9 @@ class TaskInstance(Base):
             total=task.retries + 1)
         self.start_date = datetime.now()
 
+        # TODODAN if dag concurrency reached or we are in a pool that is full I'm worried
+        # we won't ever get to this part, this is a BIG deal as it means tasks will get skipped
+        # test this out and ALSO trace it through in the code
         if not mark_success and self.state != State.QUEUED and (
                 self.pool or self.task.dag.concurrency_reached):
             # If a pool is set for this task, marking the task instance
@@ -1757,6 +1826,18 @@ class BaseOperator(object):
             return self.dag.dag_id
         else:
             return 'adhoc_' + self.owner
+
+    @property
+    def deps(self):
+        """
+        #TODODAN mention how this differs from context deps (basically these are overrideable by subtasks)
+        """
+        return {
+            NotInRetryPeriodDep(),
+            PastDagrunDep(),
+            TriggerRuleDep(),
+        }
+
 
     @property
     def schedule_interval(self):
@@ -2517,7 +2598,7 @@ class DAG(LoggingMixin):
                 root_ids = [t.task_id for t in self.roots]
                 roots = [t for t in tis if t.task_id in root_ids]
                 if any(
-                        r.state in (State.FAILED,  State.UPSTREAM_FAILED)
+                        r.state in (State.FAILED, State.UPSTREAM_FAILED)
                         for r in roots):
                     self.logger.info('Marking run {} failed'.format(run))
                     run.state = State.FAILED
@@ -2620,7 +2701,6 @@ class DAG(LoggingMixin):
     @provide_session
     def set_dag_runs_state(
             self, start_date, end_date, state=State.RUNNING, session=None):
-        dates = utils_date_range(start_date, end_date)
         drs = session.query(DagModel).filter_by(dag_id=self.dag_id).all()
         for dr in drs:
             dr.state = State.RUNNING
@@ -2841,7 +2921,7 @@ class DAG(LoggingMixin):
             local=False,
             executor=None,
             donot_pickle=configuration.getboolean('core', 'donot_pickle'),
-            ignore_dependencies=False,
+            force=False,
             ignore_first_depends_on_past=False,
             pool=None):
         """
@@ -2860,7 +2940,7 @@ class DAG(LoggingMixin):
             include_adhoc=include_adhoc,
             executor=executor,
             donot_pickle=donot_pickle,
-            ignore_dependencies=ignore_dependencies,
+            force=force,
             ignore_first_depends_on_past=ignore_first_depends_on_past,
             pool=pool)
         job.run()

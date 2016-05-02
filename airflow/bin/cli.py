@@ -112,7 +112,7 @@ def backfill(args, dag=None):
             local=args.local,
             donot_pickle=(args.donot_pickle or
                           conf.getboolean('core', 'donot_pickle')),
-            ignore_dependencies=args.ignore_dependencies,
+            force=args.ignore_dependencies,
             ignore_first_depends_on_past=args.ignore_first_depends_on_past,
             pool=args.pool)
 
@@ -198,13 +198,13 @@ def run(args, dag=None):
     ti = TaskInstance(task, args.execution_date)
 
     if args.local:
+        # TODODAN ignore_dependencies isn't used anymore, probably print deprecation warning (will be removed in 2.0) and make force true if either force or ignore_dependencies is true. Also make a note in the documentation for the command line options that force implies ignore_depends_on_past
         print("Logging into: " + filename)
         run_job = jobs.LocalTaskJob(
             task_instance=ti,
             mark_success=args.mark_success,
-            force=args.force,
+            force=args.force or args.ignore_dependencies,
             pickle_id=args.pickle,
-            ignore_dependencies=args.ignore_dependencies,
             ignore_depends_on_past=args.ignore_depends_on_past,
             pool=args.pool)
         run_job.run()
@@ -212,7 +212,6 @@ def run(args, dag=None):
         ti.run(
             mark_success=args.mark_success,
             force=args.force,
-            ignore_dependencies=args.ignore_dependencies,
             ignore_depends_on_past=args.ignore_depends_on_past,
             job_id=args.job_id,
             pool=args.pool,
@@ -242,7 +241,6 @@ def run(args, dag=None):
             ti,
             mark_success=args.mark_success,
             pickle_id=pickle_id,
-            ignore_dependencies=args.ignore_dependencies,
             ignore_depends_on_past=args.ignore_depends_on_past,
             force=args.force,
             pool=args.pool)
@@ -330,7 +328,7 @@ def test(args, dag=None):
     if args.dry_run:
         ti.dry_run()
     else:
-        ti.run(force=True, ignore_dependencies=True, test_mode=True)
+        ti.run(force=True, test_mode=True)
 
 
 def render(args):
@@ -675,7 +673,7 @@ class CLIFactory(object):
         # run
         'force': Arg(
             ("-f", "--force"),
-            "Force a run regardless or previous success", "store_true"),
+            "Force a run ignoring all dependencies", "store_true"),
         'raw': Arg(("-r", "--raw"), argparse.SUPPRESS, "store_true"),
         'ignore_dependencies': Arg(
             ("-i", "--ignore_dependencies"),

@@ -897,7 +897,7 @@ class Airflow(BaseView):
                 source = getattr(task, attr_name)
                 special_attrs_rendered[attr_name] = attr_renderer[attr_name](source)
 
-        no_failed_deps = [(
+        NO_FAILED_DEPS = [(
             "Unknown",
             dedent("""\
             All dependencies are met but the task instance is not running. In most cases this just means that the task will probably be scheduled soon unless:
@@ -906,13 +906,13 @@ class Airflow(BaseView):
             If this task instance does not start soon please contact your Airflow administrator for more information."""))]
 
         failed_dep_reasons = [(dep.dep_name, dep.reason) for dep in
-                              ti.get_failed_dep_statuses()] or NO_FAILED_DEPS
+                              ti.get_failed_dep_statuses(models.SchedulerExecContext())]
 
         title = "Task Details"
         return self.render(
             'airflow/task.html',
             attributes=attributes,
-            failed_dep_reasons=failed_dep_reasons,
+            failed_dep_reasons=failed_dep_reasons or NO_FAILED_DEPS,
             task_id=task_id,
             execution_date=execution_date,
             special_attrs_rendered=special_attrs_rendered,

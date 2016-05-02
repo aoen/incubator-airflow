@@ -40,16 +40,14 @@ class BaseExecutor(LoggingMixin):
             task_instance,
             mark_success=False,
             pickle_id=None,
-            force=False,
-            ignore_dependencies=False,
             ignore_depends_on_past=False,
+            force=False,
             pool=None):
         pool = pool or task_instance.pool
         command = task_instance.command(
             local=True,
             mark_success=mark_success,
             force=force,
-            ignore_dependencies=ignore_dependencies,
             ignore_depends_on_past=ignore_depends_on_past,
             pool=pool,
             pickle_id=pickle_id)
