@@ -292,6 +292,11 @@ class SchedulerJobTest(unittest.TestCase):
         logging.info("Trying to find task {}".format(task_1))
         ti = TI(task_1, dag.start_date)
         ti.refresh_from_db()
+        logging.info("LALA")
+        with open('/home/travis/airflow/logs/test_scheduled_queued_tasks/test_queued_task/2016-01-01T00:00:00') as w:
+            print (w.read())
+            logging.info (w.read())
+        logging.info("LOLO")
         self.assertEqual(ti.state, State.QUEUED)
 
         # now we use a DIFFERENT scheduler and executor
