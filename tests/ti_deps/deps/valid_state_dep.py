@@ -15,25 +15,35 @@
 import unittest
 from datetime import datetime
 
-from airflow.ti_deps.deps.runnable_state_dep import RunnableStateDep
+from airflow import AirflowException
+from airflow.ti_deps.deps.valid_state_dep import ValidStateDep
 from airflow.utils.state import State
 from fake_models import FakeTI
 
 
-class RunnableStateDepTest(unittest.TestCase):
+class ValidStateDepTest(unittest.TestCase):
 
-    def test_runnable_state(self):
+    def test_valid_state(self):
         """
-        Runnable state should pass this dep
+        Valid state should pass this dep
         """
         ti = FakeTI(state=State.QUEUED, end_date=datetime(2016, 1, 1))
 
-        self.assertTrue(RunnableStateDep().is_met(ti=ti, dep_context=None))
+        self.assertTrue(ValidStateDep({State.QUEUED}).is_met(ti=ti, dep_context=None))
 
-    def test_non_runnable_state(self):
+    def test_invalid_state(self):
         """
-        Non-runnable state should fail this dep
+        Invalid state should fail this dep
         """
         ti = FakeTI(state=State.SUCCESS, end_date=datetime(2016, 1, 1))
 
-        self.assertFalse(RunnableStateDep().is_met(ti=ti, dep_context=None))
+        self.assertFalse(ValidStateDep({State.FAILURE}).is_met(ti=ti, dep_context=None))
+
+    def test_no_valid_states(self):
+        """
+        If there are no valid states the dependency should throw
+        """
+        ti = FakeTI(state=State.SUCCESS, end_date=datetime(2016, 1, 1))
+
+        with self.assertRaises(AirflowException):
+            ValidStateDep({}).is_met(ti=ti, dep_context=None)

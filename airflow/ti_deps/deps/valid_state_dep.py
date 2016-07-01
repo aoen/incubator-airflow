@@ -37,7 +37,7 @@ class ValidStateDep(BaseTIDep):
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
-        if ti.state in self._valid_states
+        if ti.state in self._valid_states:
             raise StopIteration
 
         yield self._failing_status(

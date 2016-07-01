@@ -68,7 +68,7 @@ class QueueContext(MinExecContext):
 
         if not self._ignore_ti_state:
             deps.add(
-                ValidStateDep(RUNNABLE_STATES),
+                ValidStateDep(self.QUEUEABLE_STATES),
             )
 
         return deps
