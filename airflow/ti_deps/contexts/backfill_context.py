@@ -11,14 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from airflow.ti_deps.contexts.run_context import RunContext
+from airflow.ti_deps.contexts.min_exec_context import MinExecContext
+from airflow.ti_deps.contexts.queue_context import QueueContext
+from airflow.ti_deps.deps.dag_ti_slots_available_dep import DagTISlotsAvailableDep
+from airflow.ti_deps.deps.pool_has_space_dep import PoolHasSpaceDep
+from airflow.ti_deps.deps.valid_state_dep import ValidStateDep
+from airflow.utils.state import State
 
 
-class BackfillContext(RunContext):
+class BackfillContext(MinExecContext):
     """
-    The main difference between backfilling and a regular task run's dependencies is
-    that a backfill ignores a task instance's previous state (e.g. if the task succeeded
-    already).
+    Context to get the dependencies that need to be met in order for a task instance to
+    be backfilled.
     """
 
     def __init__(
@@ -43,3 +47,16 @@ class BackfillContext(RunContext):
             ignore_depends_on_past=ignore_depends_on_past,
             ignore_task_deps=ignore_task_deps,
             ignore_ti_state=True)
+
+    def get_ignoreable_deps(self, ti):
+        deps = super(BackfillContext, self).get_ignoreable_deps(ti) | {
+            DagTISlotsAvailableDep(),
+            PoolHasSpaceDep(),
+        }
+        if not self._ignore_ti_state:
+            # Backfills run tasks that have already failed
+            deps.add(
+                ValidStateDep(QueueContext.QUEUEABLE_STATES | {State.FAILED})
+            )
+
+        return deps
