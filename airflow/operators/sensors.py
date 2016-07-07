@@ -14,6 +14,7 @@ from airflow.hooks import BaseHook
 from airflow.utils.state import State
 from airflow.utils.decorators import apply_defaults
 
+import airflow
 
 class BaseSensorOperator(BaseOperator):
     '''
