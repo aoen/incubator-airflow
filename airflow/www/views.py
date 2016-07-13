@@ -1086,7 +1086,7 @@ class Airflow(BaseView):
         downstream = request.args.get('downstream') == "true"
         future = request.args.get('future') == "true"
         past = request.args.get('past') == "true"
-        MAX_PERIODS = 1000
+        MAX_PERIODS = 5000
 
         # Flagging tasks as successful
         session = settings.Session()
