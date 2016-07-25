@@ -17,9 +17,12 @@ from airflow.utils.db import provide_session
 
 class PoolHasSpaceDep(BaseTIDep):
     NAME = "DAG's Pool Has Space"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(PoolHasSpaceDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.pool_full():
             yield self._failing_status(
                 reason="Task's pool '{0}' is full.".format(ti.pool))

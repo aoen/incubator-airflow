@@ -13,16 +13,19 @@
 # limitations under the License.
 from datetime import datetime
 
-from airflow.ti_deps.deps.base_ti_dep import BaseTIDep
+from airflow.ti_deps.deps.base_ti_task_dep import BaseTITaskDep
 from airflow.utils.db import provide_session
 from airflow.utils.state import State
 
 
-class NotInRetryPeriodDep(BaseTIDep):
+class NotInRetryPeriodDep(BaseTITaskDep):
     NAME = "Not In Retry Period"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(NotInRetryPeriodDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.state != State.UP_FOR_RETRY:
             yield self._passing_status(
                 reason="The task instance was not marked for retrying.")

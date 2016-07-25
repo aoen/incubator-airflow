@@ -11,20 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from airflow.ti_deps.deps.base_ti_dep import BaseTIDep
+from airflow.ti_deps.deps.base_ti_task_dep import BaseTITaskDep
 from airflow.utils.db import provide_session
 from airflow.utils.state import State
 
 
-class PrevDagrunDep(BaseTIDep):
+class PrevDagrunDep(BaseTITaskDep):
     """
     Is the past dagrun in a state that allows this task instance to run, e.g. did this
     task instance's task in the previous dagrun complete if we are depending on past.
     """
     NAME = "Previous Dagrun State"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(PrevDagrunDep, self).get_dep_statuses(ti, session, dep_context)
+
         if dep_context.ignore_depends_on_past:
             yield self._passing_status(
                 reason="The context specified that the state of past DAGs could be "

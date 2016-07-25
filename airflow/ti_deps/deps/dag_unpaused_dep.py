@@ -17,9 +17,12 @@ from airflow.utils.db import provide_session
 
 class DagUnpausedDep(BaseTIDep):
     NAME = "Dag Not Paused"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(DagUnpausedDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.task.dag.is_paused:
             yield self._failing_status(
                 reason="Task's DAG '{0}' is paused.".format(ti.dag_id))

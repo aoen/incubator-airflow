@@ -17,9 +17,12 @@ from airflow.utils.db import provide_session
 
 class DagTISlotsAvailableDep(BaseTIDep):
     NAME = "Task Instance Slots Available"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(DagTISlotsAvailableDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.task.dag.concurrency_reached:
             yield self._failing_status(
                 reason="The maximum number of running tasks ({0}) for this task's DAG "

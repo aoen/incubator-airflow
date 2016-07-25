@@ -25,7 +25,7 @@ from airflow import jobs, settings
 from airflow import configuration as conf
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.models import DagModel, DagBag, TaskInstance, DagPickle, DagRun, Variable
-from airflow.ti_deps.contexts.scheduler_end_to_end_context import SchedulerEndToEndContext
+from airflow.ti_deps.dep_context import (DepContext, SCHEDULER_DEPS)
 from airflow.utils import db as db_utils
 from airflow.utils import logging as logging_utils
 from airflow.utils.state import State
@@ -348,7 +348,8 @@ def task_failed_deps(args):
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
 
-    failed_deps = list(ti.get_failed_dep_statuses(dep_context=SchedulerEndToEndContext()))
+    dep_context = DepContext(deps=SCHEDULER_DEPS)
+    failed_deps = list(ti.get_failed_dep_statuses(dep_context=dep_context))
     if failed_deps:
         print ("Task instance dependencies not met:")
         for dep in failed_deps:

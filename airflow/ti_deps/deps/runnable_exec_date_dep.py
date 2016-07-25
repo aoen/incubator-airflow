@@ -19,9 +19,12 @@ from airflow.utils.db import provide_session
 
 class RunnableExecDateDep(BaseTIDep):
     NAME = "Execution Date"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(RunnableExecDateDep, self).get_dep_statuses(ti, session, dep_context)
+
         cur_date = datetime.now()
 
         if ti.execution_date > cur_date:

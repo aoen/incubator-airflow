@@ -14,20 +14,23 @@
 from sqlalchemy import case, func
 
 import airflow
-from airflow.ti_deps.deps.base_ti_dep import BaseTIDep
+from airflow.ti_deps.deps.base_ti_task_dep import BaseTITaskDep
 from airflow.utils.db import provide_session
 from airflow.utils.state import State
 
 
-class TriggerRuleDep(BaseTIDep):
+class TriggerRuleDep(BaseTITaskDep):
     """
     Determines if a task's upstream tasks are in a state that allows a given task instance
     to run.
     """
     NAME = "Trigger Rule"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(TriggerRuleDep, self).get_dep_statuses(ti, session, dep_context)
+
         TI = airflow.models.TaskInstance
         TR = airflow.models.TriggerRule
 

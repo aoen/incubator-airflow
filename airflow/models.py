@@ -60,9 +60,7 @@ from airflow.exceptions import AirflowException, AirflowSkipException
 from airflow.ti_deps.deps.not_in_retry_period_dep import NotInRetryPeriodDep
 from airflow.ti_deps.deps.prev_dagrun_dep import PrevDagrunDep
 from airflow.ti_deps.deps.trigger_rule_dep import TriggerRuleDep
-from airflow.ti_deps.contexts.base_dep_context import BaseDepContext
-from airflow.ti_deps.contexts.queue_context import QueueContext
-from airflow.ti_deps.contexts.run_minus_queue_context import RunMinusQueueContext
+from airflow.ti_deps.dep_context import DepContext, QUEUE_DEPS, RUN_DEPS
 from airflow.utils.dates import cron_presets, date_range as utils_date_range
 from airflow.utils.db import provide_session
 from airflow.utils.decorators import apply_defaults
@@ -955,7 +953,7 @@ class TaskInstance(Base):
     @provide_session
     def are_dependencies_met(
             self,
-            dep_context=BaseDepContext(),
+            dep_context=None,
             session=None,
             verbose=False):
         """
@@ -965,12 +963,13 @@ class TaskInstance(Base):
 
         :param dep_context: The execution context that determines the dependencies that
             should be evaluated.
-        :type dep_context: BaseDepContext
+        :type dep_context: DepContext
         :param session: database session
         :type session: Session
         :param verbose: whether or not to print details on failed dependencies
         :type verbose: boolean
         """
+        dep_context = dep_context or DepContext()
         for dep_status in self.get_failed_dep_statuses(
                 dep_context=dep_context,
                 session=session):
@@ -988,9 +987,10 @@ class TaskInstance(Base):
     @provide_session
     def get_failed_dep_statuses(
             self,
-            dep_context=BaseDepContext(),
+            dep_context=None,
             session=None):
-        for dep in dep_context.deps_for_ti(self):
+        dep_context = dep_context or DepContext()
+        for dep in dep_context.deps | self.task.deps:
             for dep_status in dep.get_dep_statuses(
                     self,
                     session,
@@ -1060,14 +1060,14 @@ class TaskInstance(Base):
         self.refresh_from_db(session=session, lock_for_update=True)
         self.clear_xcom_data()
         self.job_id = job_id
-        iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
         self.operator = task.__class__.__name__
 
         if not ignore_all_deps and not ignore_ti_state and self.state == State.SUCCESS:
             Stats.incr('previously_succeeded', 1, 1)
 
-        queue_dep_context = QueueContext(
+        queue_dep_context = DepContext(
+            deps=QUEUE_DEPS,
             ignore_all_deps=ignore_all_deps,
             ignore_ti_state=ignore_ti_state,
             ignore_depends_on_past=ignore_depends_on_past,
@@ -1088,11 +1088,8 @@ class TaskInstance(Base):
             total=task.retries + 1)
         self.start_date = datetime.now()
 
-        # TODO(aoen) ideally we would just use a RunContext here but since we call
-        # are_dependencies_met earlier in this function on a QueueContext which has some
-        # slow queries that shouldn't be run twice, we use a RunContext - QueueContext
-        # here instead.
-        dep_context = RunMinusQueueContext(
+        dep_context = DepContext(
+            deps=RUN_DEPS - QUEUE_DEPS,
             ignore_all_deps=ignore_all_deps,
             ignore_depends_on_past=ignore_depends_on_past,
             ignore_task_deps=ignore_task_deps,

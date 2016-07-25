@@ -17,9 +17,12 @@ from airflow.utils.db import provide_session
 
 class ExecDateAfterStartDateDep(BaseTIDep):
     NAME = "Execution Date"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(ExecDateAfterStartDateDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.task.start_date and ti.execution_date < ti.task.start_date:
             yield self._failing_status(
                 reason="The execution date is {0} but this is before the task's start "

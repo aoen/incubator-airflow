@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from airflow.exceptions import AirflowException
-from airflow.ti_deps.deps.base_ti_dep import BaseTIDep
+from airflow.ti_deps.deps.base_ti_task_dep import BaseTITaskDep
 from airflow.utils.db import provide_session
 
 
-class ValidStateDep(BaseTIDep):
+class ValidStateDep(BaseTITaskDep):
     NAME = "Task Instance State"
+    IGNOREABLE = True
 
     """
     Ensures that the task instance's state is in a given set of valid states.
@@ -35,11 +36,17 @@ class ValidStateDep(BaseTIDep):
                 'ValidStatesDep received an empty set of valid states.')
         self._valid_states = valid_states
 
+    def __eq__(self, other):
+        return type(self) == type(other) and self.valid_states == other.valid_states
+
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(ValidStateDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.state in self._valid_states:
+            yield self._passing_status(reason="Task state {} was valid.".format(ti.state))
             raise StopIteration
 
         yield self._failing_status(
-            reason="Task is in the '{0}' state which is not a valid "
-                   "state for execution.".format(ti.state))
+            reason="Task is in the '{0}' state which is not a valid state for "
+                   "execution.".format(ti.state))

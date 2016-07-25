@@ -22,8 +22,19 @@ class BaseTIDep(object):
     instances to run. For example, a task that can only run if a certain number of its
     upstream tasks succeed. This is an abstract class and must be subclassed to be used.
     """
+
+    # If this dependency can be ignored by a context in which it is added to. Needed
+    # because some dependencies should never be ignoreable in their contexts.
+    IGNOREABLE = False
+
     def __init__(self):
         pass
+
+    def __eq__(self, other):
+        return type(self) == type(other)
+
+    def __hash__(self):
+        return hash(type(self))
 
     def __repr__(self):
         return "<TIDep({self.name})>".format(self=self)
@@ -36,6 +47,7 @@ class BaseTIDep(object):
         """
         return getattr(self, 'NAME', self.__class__.__name__)
 
+    @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
         """
         Returns an iterable of TIDepStatus objects that describe whether the given task
@@ -46,8 +58,15 @@ class BaseTIDep(object):
 
         :param ti: the task instance to get the dependency status for
         :type ti: TaskInstance
+        :param session: database session
+        :type session: Session
+        :param dep_context: the context for which this dependency should be evaluated for
+        :type dep_context: DepContext
         """
-        raise NotImplementedError
+        if self.IGNOREABLE and dep_context.ignore_all_deps:
+            yield self._passing_status(
+                reason="Context specified all dependencies should be ignored.")
+            raise StopIteration
 
     @provide_session
     def is_met(self, ti, session, dep_context):

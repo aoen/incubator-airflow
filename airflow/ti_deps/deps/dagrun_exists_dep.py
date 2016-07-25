@@ -17,9 +17,12 @@ from airflow.utils.db import provide_session
 
 class DagrunExistsDep(BaseTIDep):
     NAME = "Dagrun Exists"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(DagrunExistsDep, self).get_dep_statuses(ti, session, dep_context)
+
         dag = ti.task.dag
         dag_run = ti.get_dagrun(session)
         if dag_run:

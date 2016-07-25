@@ -18,8 +18,11 @@ from airflow.utils.state import State
 
 class NotSkippedDep(BaseTIDep):
     NAME = "Task Instance Not Skipped"
+    IGNOREABLE = True
 
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(NotSkippedDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.state == State.SKIPPED:
             yield self._failing_status(reason="The task instance has been skipped.")

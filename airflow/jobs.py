@@ -43,8 +43,7 @@ from airflow import executors, models, settings
 from airflow import configuration as conf
 from airflow.exceptions import AirflowException
 from airflow.models import DagRun, TaskInstance
-from airflow.ti_deps.contexts.backfill_context import BackfillContext
-from airflow.ti_deps.contexts.base_dep_context import BaseDepContext
+from airflow.ti_deps.dep_context import BACKFILL_DEPS, DepContext
 from airflow.utils.state import State
 from airflow.utils.db import provide_session, pessimistic_connection_handling
 from airflow.utils.email import send_email
@@ -766,7 +765,7 @@ class SchedulerJob(BaseJob):
                 self.logger.debug("Not processing due to state: {}".format(ti))
                 continue
             elif ti.are_dependencies_met(
-                    dep_context=BaseDepContext(flag_upstream_failed=True),
+                    dep_context=DepContext(flag_upstream_failed=True),
                     session=session):
                 self.logger.debug('Queuing task: {}'.format(ti))
                 queue.put(ti.key)
@@ -1442,8 +1441,8 @@ class BackfillJob(BaseJob):
                 # different Job. Don't rerun it.
                 # TODO(aoen): This logic should be moved into are_dependencies_met, to
                 # accomplish this a "started" member variable should be added to the
-                # BackfillContext and a new dependency class should be added to this
-                # context to check this state
+                # DepContext and a new dependency class should be added to
+                # BACKFILL_DEPS that checks this variable.
                 if key not in started:
                     if ti.state == State.SUCCESS:
                         succeeded.add(key)
@@ -1454,9 +1453,11 @@ class BackfillJob(BaseJob):
                         tasks_to_run.pop(key)
                         continue
 
-                backfill_context = BackfillContext(
+                backfill_context = DepContext(
+                    deps=BACKFILL_DEPS,
                     ignore_depends_on_past=ignore_depends_on_past,
-                    ignore_task_deps=self.ignore_task_deps)
+                    ignore_task_deps=self.ignore_task_deps,
+                    flag_upstream_failed=True)
                 # Is the task runnable? -- then run it
                 if ti.are_dependencies_met(
                         dep_context=backfill_context,
@@ -1601,11 +1602,11 @@ class BackfillJob(BaseJob):
                 'BackfillJob is deadlocked.')
             deadlocked_depends_on_past = any(
                 t.are_dependencies_met(
-                    dep_context=BaseDepContext(ignore_depends_on_past=False),
+                    dep_context=DepContext(ignore_depends_on_past=False),
                     session=session,
                     verbose=True) !=
                 t.are_dependencies_met(
-                    dep_context=BaseDepContext(ignore_depends_on_past=True),
+                    dep_context=DepContext(ignore_depends_on_past=True),
                     session=session,
                     verbose=True)
                 for t in deadlocked)

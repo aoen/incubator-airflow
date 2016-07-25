@@ -19,8 +19,15 @@ from airflow.utils.state import State
 class NotRunningDep(BaseTIDep):
     NAME = "Task Instance Not Already Running"
 
+    # Task instances must not already be running, as running two copies of the same
+    # task instance at the same time (AKA double-trigger) should be avoided at all
+    # costs, even if the context specifies that all dependencies should be ignored.
+    IGNOREABLE = False
+
     @provide_session
     def get_dep_statuses(self, ti, session, dep_context):
+        super(NotRunningDep, self).get_dep_statuses(ti, session, dep_context)
+
         if ti.state == State.RUNNING:
             yield self._failing_status(
                 reason="Task is already running, it started on {0}.".format(

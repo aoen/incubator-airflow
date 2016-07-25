@@ -60,8 +60,7 @@ from airflow import settings
 from airflow.exceptions import AirflowException
 from airflow.settings import Session
 from airflow.models import XCom
-from airflow.ti_deps.contexts.queue_context import QueueContext
-from airflow.ti_deps.contexts.scheduler_end_to_end_context import SchedulerEndToEndContext
+from airflow.ti_deps.dep_context import DepContext, QUEUE_DEPS, SCHEDULER_DEPS
 
 from airflow.utils.json import json_ser
 from airflow.utils.state import State
@@ -928,9 +927,10 @@ class Airflow(BaseView):
                        if ti.state == State.NONE else "")))]
 
         # Use the scheduler's context to figure out which dependencies are not met
+        dep_context = DepContext(SCHEDULER_DEPS)
         failed_dep_reasons = [(dep.dep_name, dep.reason) for dep in
                               ti.get_failed_dep_statuses(
-                                  dep_context=SchedulerEndToEndContext())]
+                                  dep_context=dep_context)]
 
         title = "Task Instance Details"
         return self.render(
@@ -1013,7 +1013,8 @@ class Airflow(BaseView):
         ti.refresh_from_db()
 
         # Make sure the task instance can be queued
-        dep_context = QueueContext(
+        dep_context = DepContext(
+            deps=QUEUE_DEPS,
             ignore_all_deps=ignore_all_deps,
             ignore_task_deps=ignore_task_deps,
             ignore_ti_state=ignore_ti_state)
