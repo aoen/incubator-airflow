@@ -13,6 +13,7 @@
 # limitations under the License.
 #
 import socket
+import logging
 
 from flask import Flask
 from flask_admin import Admin, base
@@ -48,6 +49,9 @@ def create_app(config=None):
     app.register_blueprint(ck, url_prefix='/ck')
     app.register_blueprint(routes)
     app.jinja_env.add_extension("chartkick.ext.charts")
+
+    log_format = airflow.settings.LOG_FORMAT_WITH_PID
+    airflow.settings.configure_logging(log_format=log_format)
 
     with app.app_context():
         from airflow.www import views
