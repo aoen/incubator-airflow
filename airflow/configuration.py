@@ -117,6 +117,7 @@ defaults = {
         'statsd_prefix': 'airflow',
         'job_heartbeat_sec': 5,
         'scheduler_heartbeat_sec': 60,
+        'scheduler_zombie_task_threshold': 5 * 60,
         'authenticate': False,
         'max_threads': 2,
         'run_duration': 30 * 60,
@@ -328,6 +329,11 @@ job_heartbeat_sec = 5
 # scheduler section in the docs for more information). This defines
 # how often the scheduler should run (in seconds).
 scheduler_heartbeat_sec = 5
+
+# Local task jobs periodically heartbeat to the DB. If the job has
+# not heartbeat in this many seconds, the scheduler will mark the
+# associated task instance as failed and will re-schedule the task.
+scheduler_zombie_task_threshold = 5 * 60
 
 # Statsd (https://github.com/etsy/statsd) integration settings
 # statsd_on =  False
