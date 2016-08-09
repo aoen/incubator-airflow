@@ -45,7 +45,7 @@ from airflow import configuration as conf
 from airflow.exceptions import AirflowException
 from airflow.models import DagRun, TaskInstance
 from airflow.settings import Stats
-from airflow.ti_deps.dep_context import BACKFILL_DEPS, DepContext
+from airflow.ti_deps.dep_context import RUN_DEPS, DepContext
 from airflow.utils.state import State
 from airflow.utils.db import provide_session, pessimistic_connection_handling
 from airflow.utils.email import send_email
@@ -1512,8 +1512,7 @@ class BackfillJob(BaseJob):
                 # TODO(aoen): This logic should be moved into are_dependencies_met, to
                 # accomplish this a "started" member variable should be added to the
                 # DepContext and a new dependency class should be added to
-                # BACKFILL_DEPS that checks this variable.
-                self.logger.debug('TI state: {}'.format(ti.state))
+                # RUN_DEPS that checks this variable.
                 if ti.state == State.SUCCESS:
                     succeeded.add(key)
                     tasks_to_run.pop(key)
@@ -1526,7 +1525,7 @@ class BackfillJob(BaseJob):
                     continue
 
                 backfill_context = DepContext(
-                    deps=BACKFILL_DEPS,
+                    deps=RUN_DEPS,
                     ignore_depends_on_past=ignore_depends_on_past,
                     ignore_task_deps=self.ignore_task_deps,
                     flag_upstream_failed=True)

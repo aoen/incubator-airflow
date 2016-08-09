@@ -71,8 +71,9 @@ class DepContext(object):
         self.ignore_task_deps = ignore_task_deps
         self.ignore_ti_state = ignore_ti_state
 
-# In order to get queued a task must have one of these states
+# In order to be able to get queued a task must have one of these states
 QUEUEABLE_STATES = {
+    State.FAILED,
     State.NONE,
     State.QUEUED,
     State.SCHEDULED,
@@ -92,16 +93,6 @@ MIN_EXEC_DEPS = {
 # be backfilled.
 QUEUE_DEPS = MIN_EXEC_DEPS | {
     ValidStateDep(QUEUEABLE_STATES)
-}
-
-# Context to get the dependencies that need to be met in order for a task instance to
-# be backfilled.
-BACKFILL_DEPS = MIN_EXEC_DEPS | {
-    DagTISlotsAvailableDep(),
-    PoolHasSpaceDep(),
-
-    # Backfills run tasks that have already failed
-    ValidStateDep(QUEUEABLE_STATES | {State.FAILED}),
 }
 
 # Dependencies that need to be met for a given task instance to be able to get run by an
