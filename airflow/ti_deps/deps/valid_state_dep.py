@@ -19,7 +19,6 @@ from airflow.utils.db import provide_session
 class ValidStateDep(BaseTIDep):
     NAME = "Task Instance State"
     IGNOREABLE = True
-    TASK_DEP = True
 
     """
     Ensures that the task instance's state is in a given set of valid states.
@@ -45,6 +44,11 @@ class ValidStateDep(BaseTIDep):
 
     @provide_session
     def _get_dep_statuses(self, ti, session, dep_context):
+        if dep_context.ignore_ti_state:
+            yield self._passing_status(
+                reason="Context specified that state should be ignored.".format(ti.state))
+            raise StopIteration
+
         if ti.state in self._valid_states:
             yield self._passing_status(reason="Task state {} was valid.".format(ti.state))
             raise StopIteration

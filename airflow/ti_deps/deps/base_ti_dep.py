@@ -86,7 +86,7 @@ class BaseTIDep(object):
                 reason="Context specified all dependencies should be ignored.")
             raise StopIteration
 
-        if self.TASK_DEP and dep_context.ignore_ti_state:
+        if self.TASK_DEP and dep_context.ignore_task_deps:
             yield self._passing_status(
                 reason="Context specified all task dependencies should be ignored.")
             raise StopIteration
