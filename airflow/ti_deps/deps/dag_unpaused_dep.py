@@ -11,18 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from airflow.ti_deps.deps.base_ti_dep import BaseTIDep
+from airflow.utils.db import provide_session
 
-from datetime import datetime
 
-from airflow.models import DAG
-from airflow.operators import DummyOperator
+class DagUnpausedDep(BaseTIDep):
+    NAME = "Dag Not Paused"
+    IGNOREABLE = True
 
-# DAG tests backfill with pooled tasks
-# Previously backfill would queue the task but never run it
-dag1 = DAG(
-    dag_id='test_start_date_scheduling',
-    start_date=datetime(2100, 1, 1))
-dag1_task1 = DummyOperator(
-    task_id='dummy',
-    dag=dag1,
-    owner='airflow')
+    @provide_session
+    def get_dep_statuses(self, ti, session, dep_context):
+        super(DagUnpausedDep, self).get_dep_statuses(ti, session, dep_context)
+
+        if ti.task.dag.is_paused:
+            yield self._failing_status(
+                reason="Task's DAG '{0}' is paused.".format(ti.dag_id))

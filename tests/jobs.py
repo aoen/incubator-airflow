@@ -34,10 +34,13 @@ from airflow.utils.state import State
 from airflow.utils.timeout import timeout
 from tests.executors.no_op_executor import NoOpExecutor
 
+from airflow import configuration
+
 configuration.test_mode()
 
 DEV_NULL = '/dev/null'
 DEFAULT_DATE = datetime.datetime(2016, 1, 1)
+
 
 class BackfillJobTest(unittest.TestCase):
 
@@ -109,7 +112,7 @@ class BackfillJobTest(unittest.TestCase):
 
     def test_backfill_depends_on_past(self):
         """
-        Test that backfill resects ignore_depends_on_past
+        Test that backfill respects ignore_depends_on_past
         """
         dag = self.dagbag.get_dag('test_depends_on_past')
         dag.clear()
@@ -214,7 +217,7 @@ class SchedulerJobTest(unittest.TestCase):
         # dagrun is running
         self.assertEqual(dr.state, State.RUNNING)
 
-        dag.get_active_runs()
+        dag.active_runs
 
         # dagrun failed
         self.assertEqual(dr.state, dagrun_state)
@@ -270,51 +273,6 @@ class SchedulerJobTest(unittest.TestCase):
             },
             dagrun_state=State.FAILED,
             advance_execution_date=True)
-
-    def test_scheduler_pooled_tasks(self):
-        """
-        Test that the scheduler handles queued tasks correctly
-        See issue #1299
-        """
-        session = settings.Session()
-        if not (
-                session.query(Pool)
-                .filter(Pool.pool == 'test_queued_pool')
-                .first()):
-            pool = Pool(pool='test_queued_pool', slots=5)
-            session.merge(pool)
-            session.commit()
-        session.close()
-
-        dag_id = 'test_scheduled_queued_tasks'
-        dag = self.dagbag.get_dag(dag_id)
-        dag.clear()
-
-        scheduler = SchedulerJob(dag_id,
-                                 num_runs=1,
-                                 executor=NoOpExecutor(),
-                                 **self.default_scheduler_args)
-        scheduler.run()
-
-        task_1 = dag.tasks[0]
-        logging.info("Trying to find task {}".format(task_1))
-        ti = TI(task_1, dag.start_date)
-        ti.refresh_from_db()
-        logging.error("TI is: {}".format(ti))
-        self.assertEqual(ti.state, State.QUEUED)
-
-        # now we use a DIFFERENT scheduler and executor
-        # to simulate the num-runs CLI arg
-        scheduler2 = SchedulerJob(
-            dag_id,
-            num_runs=5,
-            executor=DEFAULT_EXECUTOR.__class__(),
-            **self.default_scheduler_args)
-        scheduler2.run()
-
-        ti.refresh_from_db()
-        self.assertEqual(ti.state, State.FAILED)
-        dag.clear()
 
     def test_dagrun_deadlock_ignore_depends_on_past_advance_ex_date(self):
         """

@@ -1,0 +1,52 @@
+# -*- coding: utf-8 -*-
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from airflow.exceptions import AirflowException
+from airflow.ti_deps.deps.base_ti_task_dep import BaseTITaskDep
+from airflow.utils.db import provide_session
+
+
+class ValidStateDep(BaseTITaskDep):
+    NAME = "Task Instance State"
+    IGNOREABLE = True
+
+    """
+    Ensures that the task instance's state is in a given set of valid states.
+
+    :param valid_states: A list of valid states that a task instance can have to meet
+        this dependency.
+    :type valid_states: set(str)
+    :return: whether or not the task instance's state is valid
+    """
+    def __init__(self, valid_states):
+        super(ValidStateDep, self).__init__()
+
+        if not valid_states:
+            raise AirflowException(
+                'ValidStatesDep received an empty set of valid states.')
+        self._valid_states = valid_states
+
+    def __eq__(self, other):
+        return type(self) == type(other) and self.valid_states == other.valid_states
+
+    @provide_session
+    def get_dep_statuses(self, ti, session, dep_context):
+        super(ValidStateDep, self).get_dep_statuses(ti, session, dep_context)
+
+        if ti.state in self._valid_states:
+            yield self._passing_status(reason="Task state {} was valid.".format(ti.state))
+            raise StopIteration
+
+        yield self._failing_status(
+            reason="Task is in the '{0}' state which is not a valid state for "
+                   "execution.".format(ti.state))
