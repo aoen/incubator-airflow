@@ -29,7 +29,7 @@ class BaseTIDep(object):
 
     # Whether this dependency is not a global task instance dependency but specific
     # to some tasks (e.g. depends_on_past is not specified by all tasks).
-    TASK_DEP = False
+    IS_TASK_DEP = False
 
     def __init__(self):
         pass
@@ -86,7 +86,7 @@ class BaseTIDep(object):
                 reason="Context specified all dependencies should be ignored.")
             raise StopIteration
 
-        if self.TASK_DEP and dep_context.ignore_task_deps:
+        if self.IS_TASK_DEP and dep_context.ignore_task_deps:
             yield self._passing_status(
                 reason="Context specified all task dependencies should be ignored.")
             raise StopIteration

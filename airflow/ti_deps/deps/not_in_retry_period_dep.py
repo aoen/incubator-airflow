@@ -21,7 +21,7 @@ from airflow.utils.state import State
 class NotInRetryPeriodDep(BaseTIDep):
     NAME = "Not In Retry Period"
     IGNOREABLE = True
-    TASK_DEP = True
+    IS_TASK_DEP = True
 
     @provide_session
     def _get_dep_statuses(self, ti, session, dep_context):

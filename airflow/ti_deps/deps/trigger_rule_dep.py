@@ -26,7 +26,7 @@ class TriggerRuleDep(BaseTIDep):
     """
     NAME = "Trigger Rule"
     IGNOREABLE = True
-    TASK_DEP = True
+    IS_TASK_DEP = True
 
     @provide_session
     def _get_dep_statuses(self, ti, session, dep_context):
