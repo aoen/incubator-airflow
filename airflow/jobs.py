@@ -1496,11 +1496,10 @@ class BackfillJob(BaseJob):
         session.commit()
 
         # Triggering what is ready to get triggered
-        self.logger.debug('Starting main execute loop.')
         while tasks_to_run and not deadlocked:
             not_ready.clear()
-            self.logger.debug('Remaining Tasks To Run: {}'.format(tasks_to_run))
             for key, ti in list(tasks_to_run.items()):
+
                 ti.refresh_from_db()
                 ignore_depends_on_past = (
                     self.ignore_first_depends_on_past and
@@ -1516,12 +1515,10 @@ class BackfillJob(BaseJob):
                 if ti.state == State.SUCCESS:
                     succeeded.add(key)
                     tasks_to_run.pop(key)
-                    self.logger.debug('Removing TI from task queue due to state')
                     continue
                 elif ti.state == State.SKIPPED:
                     skipped.add(key)
                     tasks_to_run.pop(key)
-                    self.logger.debug('Removing TI from task queue due to state')
                     continue
 
                 backfill_context = DepContext(
@@ -1543,34 +1540,24 @@ class BackfillJob(BaseJob):
                         ignore_depends_on_past=ignore_depends_on_past,
                         pool=self.pool)
                     started.add(key)
-                    self.logger.debug('Queueing of TI complete')
 
                 # Mark the task as not ready to run
                 elif ti.state in (State.NONE, State.UPSTREAM_FAILED):
-                    self.logger.debug('Not sending TI to executor (not ready to be queued)')
                     not_ready.add(key)
-                else:
-                    self.logger.debug('Not sending TI to executor for other REASONS')
 
             self.heartbeat()
             executor.heartbeat()
 
             # If the set of tasks that aren't ready ever equals the set of
             # tasks to run, then the backfill is deadlocked
-
-            self.logger.debug("Not ready tasks: {}".format(tasks_to_run))
             if not_ready and not_ready == set(tasks_to_run):
                 deadlocked.update(tasks_to_run.values())
                 tasks_to_run.clear()
-                self.logger.debug("Set all remaining tasks to run as deadlocked")
 
             # Reacting to events
-            self.logger.debug("Ready to react to events from running task instances")
             for key, state in list(executor.get_event_buffer().items()):
-                self.logger.debug("New Event: key: {}, state: {}".format(key, state))
                 dag_id, task_id, execution_date = key
                 if key not in tasks_to_run:
-                    self.logger.debug("Skipping key because it was not in tasks_to_run")
                     continue
                 ti = tasks_to_run[key]
                 ti.refresh_from_db()
@@ -1652,8 +1639,6 @@ class BackfillJob(BaseJob):
                             self.logger.error(msg)
                             ti.handle_failure(msg)
                             tasks_to_run.pop(key)
-                    else:
-                        self.logger.debug("Task had an expected state {} after executor reported state {}".format(ti.state, state))
 
             msg = ' | '.join([
                 "[backfill progress]",
