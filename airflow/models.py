@@ -3114,6 +3114,8 @@ class DAG(BaseDag, LoggingMixin):
         return task_id in (t.task_id for t in self.tasks)
 
     def get_task(self, task_id):
+        if (task_id == 'dummyz'):
+            logging.info("TASK DICT {}".format(self.task_dict))
         if task_id in self.task_dict:
             return self.task_dict[task_id]
         raise AirflowException("Task {task_id} not found".format(**locals()))
@@ -3873,8 +3875,10 @@ class DagRun(Base):
         for ti in list(tis):
             # skip in db?
             if ti.state == State.REMOVED:
+                logging.info("REMOVING TASK WITH ID {}".format(ti.task_id))
                 tis.remove(ti)
             else:
+                logging.info("GETTING TASK WITH ID {}".format(ti.task_id))
                 ti.task = dag.get_task(ti.task_id)
 
         # pre-calculate

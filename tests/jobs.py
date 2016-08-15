@@ -527,6 +527,10 @@ class SchedulerJobTest(unittest.TestCase):
             dag=dag,
             owner='airflow')
 
+        print ("DAG1111")
+        print (dag.tasks)
+        print ("DAG2222")
+
         session = settings.Session()
         orm_dag = DagModel(dag_id=dag.dag_id)
         session.merge(orm_dag)
@@ -542,9 +546,25 @@ class SchedulerJobTest(unittest.TestCase):
         dag = DAG(
             dag_id='test_scheduler_do_not_schedule_removed_task',
             start_date=DEFAULT_DATE)
+        print ("DAG3333")
+        print (dag.tasks)
+        print ("DAG4444")
 
         queue = mock.Mock()
+
+        session = settings.Session()
+        tiz = session.query(TI).all()
+        for ti in tiz:
+            print(ti)
+
         scheduler._process_task_instances(dag, queue=queue)
+
+        print ("DAG5555")
+
+        session = settings.Session()
+        tiz = session.query(TI).all()
+        for ti in tiz:
+            print(ti)
 
         queue.put.assert_not_called()
 
