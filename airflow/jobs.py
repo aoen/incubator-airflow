@@ -1392,6 +1392,8 @@ class SchedulerJob(BaseJob):
             dag = dagbag.dags[ti_key[0]]
             task = dag.get_task(ti_key[1])
             ti = models.TaskInstance(task, ti_key[2])
+            # Refresh from DB to get the retry count
+            ti.refresh_from_db()
             # Task starts out in the queued state. All tasks in the queued
             # state will be scheduled later in the execution loop.
             ti.state = State.QUEUED
