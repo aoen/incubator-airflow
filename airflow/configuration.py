@@ -93,9 +93,15 @@ defaults = {
         'sql_alchemy_pool_recycle': 3600,
         'dagbag_import_timeout': 30,
         'non_pooled_task_slot_count': 128,
+        'task_runner': 'BashTaskRunner',
+        'default_impersonation': None,
     },
     'operators': {
-        'default_owner': 'airflow'
+        'default_owner': 'airflow',
+        'default_cpus': 1,
+        'default_ram': 512,
+        'default_disk': 512,
+        'default_gpus': 0,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -229,11 +235,22 @@ donot_pickle = False
 # How long before timing out a python file import while filling the DagBag
 dagbag_import_timeout = 30
 
+# The class to use for running task instances in a subprocess
+task_runner = BashTaskRunner
+
+# If set, tasks without a `run_as_user` argument will be ran with this user
+# Can be used to de-elevate a sudo user running Airflow when executing tasks
+# default_impersonation =
+
 
 [operators]
 # The default owner assigned to each new operator, unless
 # provided explicitly or passed via `default_args`
 default_owner = Airflow
+default_cpus = 1
+default_ram = 512
+default_disk = 512
+default_gpu = 0
 
 
 [webserver]

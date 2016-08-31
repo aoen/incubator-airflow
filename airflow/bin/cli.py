@@ -216,19 +216,46 @@ def run(args, dag=None):
     if dag:
         args.dag_id = dag.dag_id
 
-    # Setting up logging
-    log_base = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
-    directory = log_base + "/{args.dag_id}/{args.task_id}".format(args=args)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    iso = args.execution_date.isoformat()
-    filename = "{directory}/{iso}".format(**locals())
+    # Load custom airflow config
+    if args.cfg_path:
+        with open(args.cfg_path, 'r') as conf_file:
+           conf_dict = json.load(conf_file)
+
+        if os.path.exists(args.cfg_path):
+            os.remove(args.cfg_path)
+
+        for section, config in conf_dict.items():
+            for option, value in config.items():
+                conf.set(section, option, value)
+        settings.configure_vars()
+        settings.configure_orm()
 
     logging.root.handlers = []
-    logging.basicConfig(
-        filename=filename,
-        level=settings.LOGGING_LEVEL,
-        format=settings.LOG_FORMAT)
+    if args.raw:
+        # Output to STDOUT for the parent process to read and log
+        logging.basicConfig(
+            stream=sys.stdout,
+            level=settings.LOGGING_LEVEL,
+            format=settings.LOG_FORMAT)
+    else:
+        # Setting up logging to a file
+        log_base = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+        directory = log_base + "/{args.dag_id}/{args.task_id}".format(args=args)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        iso = args.execution_date.isoformat()
+        filename = "{directory}/{iso}".format(**locals())
+
+        # TODO:: remove this after Impersonation migration is stable
+        # Ensure that the log file is writable by airflow_sudoable
+        subprocess.call(
+            ['sudo', 'chown', "{}".format(os.getuid()), filename]
+        )
+
+        logging.basicConfig(
+            filename=filename,
+            level=settings.LOGGING_LEVEL,
+            format=settings.LOG_FORMAT)
 
     if not args.pickle and not dag:
         dag = get_dag(args)
@@ -298,6 +325,10 @@ def run(args, dag=None):
             pool=args.pool)
         executor.heartbeat()
         executor.end()
+
+    # Child processes should not flush or upload to remote
+    if args.raw:
+        return
 
     # Force the log to flush, and set the handler to go back to normal so we
     # don't continue logging to the task's log file. The flush is important
@@ -946,6 +977,8 @@ class CLIFactory(object):
             ("-p", "--pickle"),
             "Serialized pickle object of the entire dag (used internally)"),
         'job_id': Arg(("-j", "--job_id"), argparse.SUPPRESS),
+        'cfg_path': Arg(
+            ("--cfg_path", ), "Path to config file to use instead of airflow.cfg"),
         # webserver
         'port': Arg(
             ("-p", "--port"),
@@ -1070,7 +1103,7 @@ class CLIFactory(object):
             'help': "Run a single task instance",
             'args': (
                 'dag_id', 'task_id', 'execution_date', 'subdir',
-                'mark_success', 'force', 'pool',
+                'mark_success', 'force', 'pool', 'cfg_path',
                 'local', 'raw', 'ignore_all_dependencies', 'ignore_dependencies',
                 'ignore_depends_on_past', 'ship_dag', 'pickle', 'job_id'),
         }, {

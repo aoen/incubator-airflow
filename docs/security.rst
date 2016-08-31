@@ -247,3 +247,21 @@ backend. In order to setup an application:
 5. Fill in the required information (the 'Authorization callback URL' must be fully qualifed e.g. http://airflow.example.com/example/ghe_oauth/callback)
 6. Click 'Register application'
 7. Copy 'Client ID', 'Client Secret', and your callback route to your airflow.cfg according to the above example
+
+
+Impersonation
+'''''''''''''
+
+Airflow has the ability to impersonate a unix user while running task
+instances based on the task's ``run_as_user`` parameter, which takes a user's name.
+
+*NOTE* For impersonations to work, Airflow must be run with `sudo` as subtasks are run
+with `sudo -u` and permissions of files are changed. Furthermore, the unix user needs to
+exist on the worker.
+
+Subtasks with impersonation will still log to the same folder, except that the files they
+log to will have permissions changed such that only the unix user can write to it.
+
+*Default impersonation* To prevent tasks that don't use impersonation to be run with `sudo` priviledges,
+you can set the `default_impersonation` config in `core` which sets a default user impersonate
+if `run_as_user` is not set.
