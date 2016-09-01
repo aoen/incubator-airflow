@@ -46,7 +46,6 @@ from airflow.exceptions import AirflowException
 from airflow.models import DagRun, TaskInstance
 from airflow.settings import Stats
 from airflow.ti_deps.dep_context import RUN_DEPS, DepContext
-from airflow.task_runner import get_task_runner
 from airflow.utils.state import State
 from airflow.utils.db import provide_session, pessimistic_connection_handling
 from airflow.utils.email import send_email
@@ -771,7 +770,7 @@ class SchedulerJob(BaseJob):
             self.logger.info("Examining {}".format(ti))
             if ti.are_dependencies_met(
                     dep_context=DepContext(flag_upstream_failed=True), session=session):
-
+  
                     self.logger.debug('Queuing task: {}'.format(ti))
                     queue.put(ti.key)
             else:
@@ -962,7 +961,7 @@ class SchedulerJob(BaseJob):
                                              task_concurrency_limit))
                     continue
 
-                command = " ".join(TI.generate_command(
+                command = TI.generate_command(
                     task_instance.dag_id,
                     task_instance.task_id,
                     task_instance.execution_date,
@@ -974,7 +973,7 @@ class SchedulerJob(BaseJob):
                     ignore_ti_state=False,
                     pool=task_instance.pool,
                     file_path=simple_dag_bag.get_dag(task_instance.dag_id).full_filepath,
-                    pickle_id=simple_dag_bag.get_dag(task_instance.dag_id).pickle_id))
+                    pickle_id=simple_dag_bag.get_dag(task_instance.dag_id).pickle_id)
 
                 priority = task_instance.priority_weight
                 queue = task_instance.queue
@@ -1722,15 +1721,27 @@ class LocalTaskJob(BaseJob):
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
-        self.task_runner = get_task_runner(self)
         try:
-            self.task_runner.start()
+            command = self.task_instance.command(
+                raw=True,
+                ignore_all_deps=self.ignore_all_deps,
+                ignore_depends_on_past=self.ignore_depends_on_past,
+                ignore_task_deps=self.ignore_task_deps,
+                ignore_ti_state=self.ignore_ti_state,
+                pickle_id=self.pickle_id,
+                mark_success=self.mark_success,
+                job_id=self.id,
+                pool=self.pool,
+            )
+            self.process = subprocess.Popen(['bash', '-c', command])
+            self.logger.info("Subprocess PID is {}".format(self.process.pid))
+
             last_heartbeat_time = time.time()
             heartbeat_time_limit = conf.getint('scheduler',
                                                'scheduler_zombie_task_threshold')
             while True:
                 # Monitor the task to see if it's done
-                return_code = self.task_runner.return_code()
+                return_code = self.process.poll()
                 if return_code is not None:
                     return
 
@@ -1756,12 +1767,11 @@ class LocalTaskJob(BaseJob):
                                            .format(time_since_last_heartbeat,
                                                    heartbeat_time_limit))
         finally:
-            self.task_runner.on_finish()
             # Kill processes that were left running
             kill_descendant_processes(self.logger)
 
     def on_kill(self):
-        self.task_runner.terminate()
+        self.process.terminate()
 
     """
     def heartbeat_callback(self):
