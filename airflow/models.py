@@ -1217,6 +1217,8 @@ class TaskInstance(Base):
             logging.error("Failed when executing success callback")
             logging.exception(e3)
 
+        Stats.incr('operator_successes_{}'.format(self.task.__class__.__name__), 1, 1)
+
         session.commit()
 
     def dry_run(self):
@@ -1233,6 +1235,7 @@ class TaskInstance(Base):
         session = settings.Session()
         self.end_date = datetime.now()
         self.set_duration()
+        Stats.incr('operator_failures_{}'.format(task.__class__.__name__), 1, 1)
         if not test_mode:
             session.add(Log(State.FAILED, self))
 
