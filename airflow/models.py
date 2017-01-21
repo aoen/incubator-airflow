@@ -242,11 +242,13 @@ class DagBag(BaseDagBag, LoggingMixin):
             return found_dags
 
         mods = []
+
         if not zipfile.is_zipfile(filepath):
             if safe_mode and os.path.isfile(filepath):
                 with open(filepath, 'rb') as f:
                     content = f.read()
                     if not all([s in content for s in (b'DAG', b'airflow')]):
+                        self.file_last_changed[filepath] = file_last_changed_on_disk
                         return found_dags
 
             self.logger.debug("Importing {}".format(filepath))
@@ -283,6 +285,8 @@ class DagBag(BaseDagBag, LoggingMixin):
                                               format(mod.filename, filepath))
                             content = zf.read()
                             if not all([s in content for s in (b'DAG', b'airflow')]):
+                                self.file_last_changed[filepath] = (
+                                    file_last_changed_on_disk)
                                 # todo: create ignore list
                                 return found_dags
 
