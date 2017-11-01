@@ -1904,7 +1904,7 @@ class Airflow(BaseView):
         return redirect('/admin/variable')
 
 
-class HomeView(AdminIndexView):
+class HomeView(AdminIndexView, LoggingMixin):
     @expose("/")
     @login_required
     def index(self):
@@ -2034,11 +2034,19 @@ class HomeView(AdminIndexView):
 
         auto_complete_data = set()
         for dag in webserver_dags_filtered.values():
-            auto_complete_data.add(dag.dag_id)
-            auto_complete_data.add(dag.owner)
+            try:
+                # In case the dag id or owner are incorrect, we just skip the dag and
+                # log the error
+                auto_complete_data.add(dag.dag_id)
+                auto_complete_data.add(dag.owner)
+            except Exception as e:
+                self.logger.error(e)
         for dag in orm_dags.values():
-            auto_complete_data.add(dag.dag_id)
-            auto_complete_data.add(dag.owners)
+            try:
+                auto_complete_data.add(dag.dag_id)
+                auto_complete_data.add(dag.owners)
+            except Exception as e:
+                self.logger.error(e)
 
         return self.render(
             'airflow/dags.html',
