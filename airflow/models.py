@@ -248,6 +248,7 @@ class DagBag(BaseDagBag, LoggingMixin):
         """
         found_dags = []
 
+        logging.info("Processing filepath " + str(filepath))
         # todo: raise exception?
         if not os.path.isfile(filepath):
             return found_dags
@@ -267,6 +268,7 @@ class DagBag(BaseDagBag, LoggingMixin):
 
         mods = []
         if not zipfile.is_zipfile(filepath):
+            logging.info("Processed file is not a zip file")
             if safe_mode and os.path.isfile(filepath):
                 with open(filepath, 'rb') as f:
                     content = f.read()
@@ -293,6 +295,7 @@ class DagBag(BaseDagBag, LoggingMixin):
                     self.file_last_changed[filepath] = file_last_changed_on_disk
 
         else:
+            logging.info("Processed file is a zip file")
             zip_file = zipfile.ZipFile(filepath)
             for mod in zip_file.infolist():
                 head, _ = os.path.split(mod.filename)
@@ -417,8 +420,10 @@ class DagBag(BaseDagBag, LoggingMixin):
         FileLoadStat = namedtuple(
             'FileLoadStat', "file duration dag_num task_num dags")
         if os.path.isfile(dag_folder):
+            logging.info("Processing dag_folder as file")
             self.process_file(dag_folder, only_if_updated=only_if_updated)
         elif os.path.isdir(dag_folder):
+            logging.info("Processing dag_folder as dir")
             patterns = []
             for root, dirs, files in os.walk(dag_folder, followlinks=True):
                 ignore_file = [f for f in files if f == '.airflowignore']
@@ -430,10 +435,12 @@ class DagBag(BaseDagBag, LoggingMixin):
                     try:
                         filepath = os.path.join(root, f)
                         if not os.path.isfile(filepath):
+                            logging.info("Skipping filepath " + str(filepath) + " because it wasn't a file")
                             continue
                         mod_name, file_ext = os.path.splitext(
                             os.path.split(filepath)[-1])
                         if file_ext != '.py' and not zipfile.is_zipfile(filepath):
+                            logging.info("Filepath: " + str(filepath) + " skipped because its extension was incorrect or it was a zipfile")
                             continue
                         if not any(
                                 [re.findall(p, filepath) for p in patterns]):
