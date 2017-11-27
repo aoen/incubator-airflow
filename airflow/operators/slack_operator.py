@@ -12,17 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import random
-from slackclient import SlackClient
-from airflow.models import BaseOperator, Connection
-from airflow.utils.decorators import apply_defaults
-from airflow.exceptions import AirflowException
 import json
-import logging
-from airflow import settings
 
-CONN_ENV_PREFIX = 'AIRFLOW_CONN_'
+from airflow.models import BaseOperator
+from airflow.utils.decorators import apply_defaults
+from airflow.hooks.slack_hook import SlackHook
+from airflow.exceptions import AirflowException
 
 
 class SlackAPIOperator(BaseOperator):
@@ -31,6 +26,8 @@ class SlackAPIOperator(BaseOperator):
     The SlackAPIPostOperator is derived from this operator.
     In the future additional Slack API Operators will be derived from this class as well
 
+    :param slack_conn_id: Slack connection ID which its password is Slack API token
+    :type slack_conn_id: string
     :param token: Slack API token (https://api.slack.com/web)
     :type token: string
     :param method: The Slack API Method to Call (https://api.slack.com/methods)
@@ -41,55 +38,23 @@ class SlackAPIOperator(BaseOperator):
 
     @apply_defaults
     def __init__(self,
-                 slack_conn_id='unset',
-                 token='unset',
-                 method='unset',
+                 slack_conn_id=None,
+                 token=None,
+                 method=None,
                  api_params=None,
                  *args, **kwargs):
         super(SlackAPIOperator, self).__init__(*args, **kwargs)
-        self.slack_conn_id = slack_conn_id
+
+        if token is None and slack_conn_id is None:
+            raise AirflowException('No valid Slack token nor slack_conn_id supplied.')
+        if token is not None and slack_conn_id is not None:
+            raise AirflowException('Cannot determine Slack credential when both token and slack_conn_id are supplied.')
+
         self.token = token
+        self.slack_conn_id = slack_conn_id
+
         self.method = method
         self.api_params = api_params
-
-    def __get_token(self, token, slack_conn_id):
-        if token == 'unset' and slack_conn_id == 'unset':
-            logging.error('No valid Slack token nor slack_conn_id supplied.')
-            raise AirflowException('No valid Slack token supplied.')
-        if token != 'unset' and slack_conn_id != 'unset':
-            logging.error('Cannot determine Slack credential when both token and slack_conn_id are supplied.')
-            raise AirflowException('Cannot determine Slack credential when both token and slack_conn_id are supplied.')
-        if token != 'unset':
-            return token
-        else:
-            conn = self.__get_connection(slack_conn_id)
-
-            if not hasattr(conn, 'password') or not getattr(conn, 'password'):
-                raise AirflowException('Missing token(password) in Slack connection')
-            return conn.password
-
-    # TODO move connection related logic into a new slack hook.
-    def __get_connection(self, conn_id):
-        environment_uri = os.environ.get(CONN_ENV_PREFIX + conn_id.upper())
-        if environment_uri:
-            conn = Connection(conn_id=conn_id, uri=environment_uri)
-        else:
-            conn = random.choice(self.__get_connections(conn_id))
-        return conn
-
-    def __get_connections(self, conn_id):
-        session = settings.Session()
-        conns = (
-            session.query(Connection)
-                .filter(Connection.conn_id == conn_id)
-                .all()
-        )
-        session.expunge_all()
-        session.close()
-        if not conns:
-            raise AirflowException(
-                "The conn_id `{0}` isn't defined".format(conn_id))
-        return conns
 
     def construct_api_call_params(self):
         """
@@ -109,12 +74,8 @@ class SlackAPIOperator(BaseOperator):
         """
         if not self.api_params:
             self.construct_api_call_params()
-        token = self.__get_token(self.token, self.slack_conn_id)
-        sc = SlackClient(token)
-        rc = sc.api_call(self.method, **self.api_params)
-        if not rc['ok']:
-            logging.error("Slack API call failed ({})".format(rc['error']))
-            raise AirflowException("Slack API call failed: ({})".format(rc['error']))
+        slack = SlackHook(token=self.token, slack_conn_id=self.slack_conn_id)
+        slack.call(self.method, self.api_params)
 
 
 class SlackAPIPostOperator(SlackAPIOperator):
@@ -133,7 +94,7 @@ class SlackAPIPostOperator(SlackAPIOperator):
     :type attachments: array of hashes
     """
 
-    template_fields = ('username', 'text', 'attachments')
+    template_fields = ('username', 'text', 'attachments', 'channel')
     ui_color = '#FFBA40'
 
     @apply_defaults
