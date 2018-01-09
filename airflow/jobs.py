@@ -993,6 +993,7 @@ class SchedulerJob(BaseJob):
                 ti.set_state(new_state, session=session)
                 tis_changed += 1
         else:
+            pass
             # TODO (Dan Davydov) Temporarily commented out since it is causing DB load issues
             #  tis_changed = (
                 #  session
