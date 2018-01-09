@@ -993,19 +993,20 @@ class SchedulerJob(BaseJob):
                 ti.set_state(new_state, session=session)
                 tis_changed += 1
         else:
-            tis_changed = (
-                session
-                    .query(models.TaskInstance)
-                    .filter(models.TaskInstance.dag_id.in_(simple_dag_bag.dag_ids))
-                    .filter(models.TaskInstance.state.in_(old_states))
-                    .filter(and_(
-                        models.DagRun.dag_id == models.TaskInstance.dag_id,
-                        models.DagRun.execution_date == models.TaskInstance.execution_date,
-                        models.DagRun.state != State.RUNNING))
-                    .update({models.TaskInstance.state: new_state},
-                            synchronize_session=False)
-            )
-            session.commit()
+            # TODO (Dan Davydov) Temporarily commented out since it is causing DB load issues
+            #  tis_changed = (
+                #  session
+                    #  .query(models.TaskInstance)
+                    #  .filter(models.TaskInstance.dag_id.in_(simple_dag_bag.dag_ids))
+                    #  .filter(models.TaskInstance.state.in_(old_states))
+                    #  .filter(and_(
+                        #  models.DagRun.dag_id == models.TaskInstance.dag_id,
+                        #  models.DagRun.execution_date == models.TaskInstance.execution_date,
+                        #  models.DagRun.state != State.RUNNING))
+                    #  .update({models.TaskInstance.state: new_state},
+                            #  synchronize_session=False)
+            #  )
+            #  session.commit()
 
         if tis_changed > 0:
             self.logger.warning("Set {} task instances to state={} as their associated "
