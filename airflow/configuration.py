@@ -206,6 +206,9 @@ default_ram = 512
 default_disk = 512
 default_gpus = 0
 
+[hive]
+# Default mapreduce queue for HiveOperator tasks
+default_hive_mapred_queue =
 
 [webserver]
 # The base url of your website as airflow cannot guess what domain or

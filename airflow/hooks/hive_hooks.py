@@ -29,6 +29,7 @@ from tempfile import NamedTemporaryFile
 from thrift.transport.TTransport import TTransportException
 import hive_metastore
 
+from airflow import configuration as conf
 from airflow.exceptions import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils.helpers import as_flattened_list
@@ -87,7 +88,8 @@ class HiveCliHook(BaseHook):
                     "Invalid Mapred Queue Priority.  Valid values are: "
                     "{}".format(', '.join(HIVE_QUEUE_PRIORITIES)))
 
-        self.mapred_queue = mapred_queue
+        self.mapred_queue = mapred_queue or conf.get('hive',
+                                                     'default_hive_mapred_queue')
         self.mapred_queue_priority = mapred_queue_priority
         self.mapred_job_name = mapred_job_name
 
