@@ -54,22 +54,18 @@ class BaseExecutor(LoggingMixin):
             del self.running[key]
             self.queued_tasks[key] = (command, priority, queue, task_instance)
 
-    def queue_task_instance(self,
-                            task_instance,
-                            mark_success=False,
-                            pickle_id=None,
-                            ignore_all_deps=False,
-                            ignore_depends_on_past=False,
-                            ignore_task_deps=False,
-                            ignore_ti_state=False,
-                            pool=None,
-                            cfg_path=None):
-        pool = pool or task_instance.pool
 
-        # AIRFLOW-1985:
-        # Adding cfg_path as a way to propagate the config values if using impersonation
-        # (run_as_user), given that there are different code paths running tasks.
-        # For a long term solution we need to address AIRFLOW-1986
+    def queue_task_instance(
+            self,
+            task_instance,
+            mark_success=False,
+            pickle_id=None,
+            ignore_all_deps=False,
+            ignore_depends_on_past=False,
+            ignore_task_deps=False,
+            ignore_ti_state=False,
+            pool=None):
+        pool = pool or task_instance.pool
         command = task_instance.command(
             local=True,
             mark_success=mark_success,
@@ -78,8 +74,7 @@ class BaseExecutor(LoggingMixin):
             ignore_task_deps=ignore_task_deps,
             ignore_ti_state=ignore_ti_state,
             pool=pool,
-            pickle_id=pickle_id,
-            cfg_path=cfg_path)
+            pickle_id=pickle_id)
         self.queue_command(
             task_instance,
             command,

@@ -396,7 +396,7 @@ def run(args, dag=None):
         if not os.path.isdir(directory):
             # Create the directory as globally writable using custom mkdirs
             # as os.makedirs doesn't set mode properly.
-            mkdirs(directory, 0o777)
+            mkdirs(directory, 0o775)
         log_relative = logging_utils.get_log_filename(
             args.dag_id, args.task_id, args.execution_date, try_number)
         filename = os.path.join(log_base, log_relative)

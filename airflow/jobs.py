@@ -57,7 +57,7 @@ from airflow.utils.dag_processing import (AbstractDagFileProcessor,
 from airflow.utils.email import send_email
 from airflow.utils.logging import LoggingMixin
 from airflow.utils import asciiart
-from airflow.utils.configuration import tmp_configuration_copy
+
 
 Base = models.Base
 ID_LEN = models.ID_LEN
@@ -2233,23 +2233,13 @@ class BackfillJob(BaseJob):
                                 # Skip scheduled state, we are executing immediately
                                 ti.state = State.QUEUED
                                 session.merge(ti)
-
-                                # no need to clean temp file, airflow run cli removes
-                                # it, see cli.py:342 - only relevant to executors running
-                                # locally
-                                cfg_path = None
-                                if executor.__class__ in (executors.LocalExecutor,
-                                                          executors.SequentialExecutor):
-                                    cfg_path = tmp_configuration_copy()
-
                                 executor.queue_task_instance(
                                     ti,
                                     mark_success=self.mark_success,
                                     pickle_id=pickle_id,
                                     ignore_task_deps=self.ignore_task_deps,
                                     ignore_depends_on_past=ignore_depends_on_past,
-                                    pool=self.pool,
-                                    cfg_path=cfg_path)
+                                    pool=self.pool)
                                 ti_status.started[key] = ti
                                 ti_status.to_run.pop(key)
                         session.commit()
