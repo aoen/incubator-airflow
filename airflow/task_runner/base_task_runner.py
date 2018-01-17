@@ -20,6 +20,7 @@ import threading
 
 from airflow import configuration as conf
 from airflow.utils.logging import LoggingMixin
+from airflow.utils.configuration import tmp_configuration_copy
 from tempfile import mkstemp
 
 
@@ -41,7 +42,6 @@ class BaseTaskRunner(LoggingMixin):
         self._task_instance = local_task_job.task_instance
 
         popen_prepend = []
-        cfg_path = None
         if self._task_instance.run_as_user:
             self.run_as_user = self._task_instance.run_as_user
         else:
@@ -50,30 +50,22 @@ class BaseTaskRunner(LoggingMixin):
             except conf.AirflowConfigException:
                 self.run_as_user = None
 
+        # Always provide a copy of the configuration file settings
+        cfg_path = tmp_configuration_copy()
+        # The following command should always work since the user doing chmod is the same
+        # as the one who just created the file.
+        subprocess.call(
+            ['chmod', '600', cfg_path]
+        )
+
         # Add sudo commands to change user if we need to. Needed to handle SubDagOperator
         # case using a SequentialExecutor.
+        self.logger.debug("Planning to run as the {} user".format(self.run_as_user))
         if self.run_as_user and (self.run_as_user != getpass.getuser()):
-            self.logger.debug("Planning to run as the {} user".format(self.run_as_user))
-            cfg_dict = conf.as_dict(display_sensitive=True)
-            cfg_subset = {
-                'core': cfg_dict.get('core', {}),
-                'smtp': cfg_dict.get('smtp', {}),
-                'scheduler': cfg_dict.get('scheduler', {}),
-                'webserver': cfg_dict.get('webserver', {}),
-                'hive': cfg_dict.get('hive', {}),  # we should probably generalized this
-            }
-            temp_fd, cfg_path = mkstemp()
-
             # Give ownership of file to user; only they can read and write
             subprocess.call(
                 ['sudo', 'chown', self.run_as_user, cfg_path]
             )
-            subprocess.call(
-                ['sudo', 'chmod', '600', cfg_path]
-            )
-
-            with os.fdopen(temp_fd, 'w') as temp_file:
-                json.dump(cfg_subset, temp_file)
 
             # propagate PYTHONPATH environment variable
             pythonpath_value = os.environ.get(PYTHONPATH_VAR, '')
