@@ -20,10 +20,16 @@ import logging
 from subprocess import Popen, STDOUT, PIPE
 from tempfile import gettempdir, NamedTemporaryFile
 
+from airflow import configuration as conf
 from airflow.exceptions import AirflowException
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 from airflow.utils.file import TemporaryDirectory
+
+
+# Variables needed for running in the same context
+PYTHONPATH_VAR = 'PYTHONPATH'
+AIRFLOW_HOME_VAR = 'AIRFLOW_HOME'
 
 
 class BashOperator(BaseOperator):
@@ -67,7 +73,16 @@ class BashOperator(BaseOperator):
         Execute the bash command in a temporary directory
         which will be cleaned afterwards
         """
-        bash_command = self.bash_command
+
+        # These two variables need to be exported to propagate them to scripts
+        # that may need the to run airflow related code.
+        airflow_home_value = conf.get('core', AIRFLOW_HOME_VAR)
+        pythonpath_value = os.environ.get(PYTHONPATH_VAR, '')
+
+        bash_command = ('export {}={}; '.format(AIRFLOW_HOME_VAR, airflow_home_value) +
+                        'export {}={}; '.format(PYTHONPATH_VAR, pythonpath_value) +
+                        self.bash_command)
+
         logging.info("tmp dir root location: \n" + gettempdir())
         with TemporaryDirectory(prefix='airflowtmp') as tmp_dir:
             with NamedTemporaryFile(dir=tmp_dir, prefix=self.task_id) as f:
@@ -75,7 +90,7 @@ class BashOperator(BaseOperator):
                 f.write(bytes(bash_command, 'utf_8'))
                 f.flush()
                 fname = f.name
-                script_location = tmp_dir + "/" + fname
+                script_location = os.path.abspath(fname)
                 logging.info("Temporary script "
                              "location :{0}".format(script_location))
                 logging.info("Running command: " + bash_command)
