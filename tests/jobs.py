@@ -852,9 +852,6 @@ class LocalTaskJobTest(unittest.TestCase):
 
 
 class SchedulerJobTest(unittest.TestCase):
-    # These defaults make the test faster to run
-    default_scheduler_args = {"file_process_interval": 0,
-                              "processor_poll_interval": 0.5}
 
     def setUp(self):
         self.dagbag = DagBag()
@@ -1699,8 +1696,6 @@ class SchedulerJobTest(unittest.TestCase):
             dag.clear()
 
         scheduler = SchedulerJob(dag_ids=dag_ids,
-                                 file_process_interval=0,
-                                 processor_poll_interval=0.5,
                                  num_runs=2)
         scheduler.run()
 
