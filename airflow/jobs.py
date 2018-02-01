@@ -535,7 +535,8 @@ class SchedulerJob(BaseJob):
             num_runs=-1,
             file_process_interval=conf.getint('scheduler',
                                               'min_file_process_interval'),
-            processor_poll_interval=1.0,
+            min_file_parsing_loop_time=conf.getint('scheduler',
+                                                   'min_file_parsing_loop_time'),
             run_duration=None,
             do_pickle=False,
             *args, **kwargs):
@@ -549,8 +550,6 @@ class SchedulerJob(BaseJob):
         :type subdir: unicode
         :param num_runs: The number of times to try to schedule each DAG file.
         -1 for unlimited within the run_duration.
-        :param processor_poll_interval: The number of seconds to wait between
-        polls of running processors
         :param run_duration: how long to run (in seconds) before exiting
         :type run_duration: int
         :param do_pickle: once a DAG object is obtained by executing the Python
@@ -567,7 +566,6 @@ class SchedulerJob(BaseJob):
 
         self.num_runs = num_runs
         self.run_duration = run_duration
-        self._processor_poll_interval = processor_poll_interval
 
         self.do_pickle = do_pickle
         super(SchedulerJob, self).__init__(*args, **kwargs)
@@ -588,9 +586,11 @@ class SchedulerJob(BaseJob):
         # 30 seconds.
         self.print_stats_interval = conf.getint('scheduler',
                                                 'print_stats_interval')
-        # Parse and schedule each file no faster than this interval. Default
-        # to 3 minutes.
+        # Parse and schedule each file no faster than this interval.
         self.file_process_interval = file_process_interval
+        # Wait until at least this many seconds have passed before parsing files once all
+        # files have finished parsing.
+        self.min_file_parsing_loop_time = min_file_parsing_loop_time
         # Directory where log files for the processes that scheduled the DAGs reside
         self.child_process_log_directory = conf.get('scheduler',
                                                     'child_process_log_directory')
@@ -1510,6 +1510,9 @@ class SchedulerJob(BaseJob):
                          .format(self.num_runs))
         self.logger.info("Process each file at most once every {} seconds"
                          .format(self.file_process_interval))
+        self.logger.info("Wait until at least {} seconds have passed between file parsing "
+                         "loops"
+                         .format(self.min_file_parsing_loop_time))
         self.logger.info("Checking for new files in {} every {} seconds"
                          .format(self.subdir, self.dag_dir_list_interval))
 
@@ -1529,6 +1532,7 @@ class SchedulerJob(BaseJob):
                                                     known_file_paths,
                                                     self.max_threads,
                                                     self.file_process_interval,
+                                                    self.min_file_parsing_loop_time,
                                                     self.child_process_log_directory,
                                                     self.num_runs,
                                                     processor_factory)
@@ -1678,11 +1682,8 @@ class SchedulerJob(BaseJob):
                 last_stat_print_time = datetime.now()
 
             loop_end_time = time.time()
-            self.logger.debug("Ran scheduling loop in {:.2f}s"
-                              .format(loop_end_time - loop_start_time))
-            self.logger.debug("Sleeping for {:.2f}s"
-                              .format(self._processor_poll_interval))
-            time.sleep(self._processor_poll_interval)
+            self.logger.debug("Ran scheduling loop in {:.2f}s".format(
+                              loop_end_time - loop_start_time))
 
             # Exit early for a test mode
             if processor_manager.max_runs_reached():
@@ -2504,8 +2505,8 @@ class LocalTaskJob(BaseJob):
                 ignore_ti_state=self.ignore_ti_state,
                 job_id=self.id,
                 pool=self.pool):
-            self.logger.info("Task is not able to be run") 
-            return 
+            self.logger.info("Task is not able to be run")
+            return
 
         try:
             self.task_runner.start()
