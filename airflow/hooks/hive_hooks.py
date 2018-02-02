@@ -16,7 +16,8 @@
 from __future__ import print_function
 from builtins import zip
 from past.builtins import basestring
-
+import os
+import pwd
 import collections
 import unicodecsv as csv
 import itertools
@@ -658,6 +659,14 @@ class HiveServer2Hook(BaseHook):
         # IMPORTANT AIRBNB, the constructor has diverged from the open-source version.
         # run_as_user was added so that the HiveServer2 connection would use it without
         # any authentication.
+        # PWD is more reliable on all unix systems.
+        # pwd.getpwuid(os.geteuid()).pw_name reports the original user after an su.
+        # Note that os.getlogin() returns the name of the user logged in on the controlling terminal
+        # of the process so it is not as reliable.
+        user = pwd.getpwuid(os.getuid())[0]
+        if run_as_user != user:
+            raise AirflowException("When calling HiveServer2Hook, the run_as_user parameter "
+                                   "({}) must be equal to the logged on user ({}).".format(run_as_user, user))
         self.run_as_user = run_as_user
 
     def get_conn(self, schema=None):
