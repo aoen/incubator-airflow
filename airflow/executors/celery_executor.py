@@ -105,8 +105,8 @@ class CeleryExecutor(BaseExecutor):
                         del self.tasks[key]
                         del self.last_state[key]
                     else:
-                        self.logger.info("Unexpected state: " + async.state)
-                    self.last_state[key] = async.state
+                        self.logger.info("Unexpected state: " + state)
+                    self.last_state[key] = state
             except Exception as e:
                 logging.error("Error syncing the celery executor, ignoring "
                               "it:\n{}\n".format(e, traceback.format_exc()))
