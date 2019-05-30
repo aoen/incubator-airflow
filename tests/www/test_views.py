@@ -493,7 +493,7 @@ class TestAirflowBaseViews(TestBase):
     def test_last_dagruns(self):
         resp = self.client.get('last_dagruns', follow_redirects=True)
         self.check_content_in_response('example_bash_operator', resp)
-        raise Exception(resp)
+        raise Exception(resp.data.decode('utf-8'))
 
     def test_tree(self):
         url = 'tree?dag_id=example_bash_operator'
