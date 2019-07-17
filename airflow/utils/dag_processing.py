@@ -7,9 +7,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -327,7 +327,8 @@ class DagFileProcessorManager(LoggingMixin):
                  parallelism,
                  process_file_interval,
                  max_runs,
-                 processor_factory):
+                 processor_factory,
+                 processor_timeout):
         """
         :param dag_directory: Directory where DAG definitions are kept. All
         files in file_paths should be under this directory
@@ -346,7 +347,8 @@ class DagFileProcessorManager(LoggingMixin):
         :param processor_factory: function that creates processors for DAG
         definition files. Arguments are (dag_definition_path)
         :type processor_factory: (unicode, unicode) -> (AbstractDagFileProcessor)
-
+        :param processor_timeout: How long to wait before timing out a DAG file processor
+        :type processor_timeout: timedelta
         """
         self._file_paths = file_paths
         self._file_path_queue = []
@@ -365,6 +367,8 @@ class DagFileProcessorManager(LoggingMixin):
         self._run_count = defaultdict(int)
         # Scheduler heartbeat key.
         self._heart_beat_key = 'heart-beat'
+        # How long to wait before timing out a process to parse a DAG file
+        self._processor_timeout = processor_timeout
 
     @property
     def file_paths(self):
@@ -480,6 +484,8 @@ class DagFileProcessorManager(LoggingMixin):
         have finished since the last time this was called
         :rtype: list[SimpleDag]
         """
+        self._kill_timed_out_processors()
+
         finished_processors = {}
         """:type : dict[unicode, AbstractDagFileProcessor]"""
         running_processors = {}
@@ -565,7 +571,7 @@ class DagFileProcessorManager(LoggingMixin):
                 processor.pid, file_path
             )
             self._processors[file_path] = processor
-        
+
         self.log.info("Number of active file processors: {}".format(len(self._processors)))
 
         # Update scheduler heartbeat count.
@@ -575,6 +581,20 @@ class DagFileProcessorManager(LoggingMixin):
         self.log.info("Processed DAGs: {}".format(simple_dag_ids))
 
         return simple_dags
+
+    def _kill_timed_out_processors(self):
+        """
+        Kill any file processors that timeout to defend against process hangs.
+        """
+        now = timezone.utcnow()
+        for file_path, processor in self._processors.items():
+            duration = now - processor.start_time
+            if duration > self._processor_timeout:
+                self.log.info(
+                    "Processor for %s with PID %s started at %s has timed out, "
+                    "killing it.",
+                    processor.file_path, processor.pid, processor.start_time.isoformat())
+                processor.kill()
 
     def max_runs_reached(self):
         """

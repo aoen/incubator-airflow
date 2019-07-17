@@ -432,13 +432,29 @@ class DagFileProcessor(AbstractDagFileProcessor, LoggingMixin):
         :type sigkill: bool
         """
         if self._process is None:
-            raise AirflowException("Tried to call stop before starting!")
+            raise AirflowException("Tried to terminate before starting!")
         # The queue will likely get corrupted, so remove the reference
         self._result_queue = None
         self._process.terminate()
         # Arbitrarily wait 5s for the process to die
         self._process.join(5)
-        if sigkill and self._process.is_alive():
+        if sigkill:
+            self._kill_process()
+        self._manager.shutdown()
+
+    def kill(self):
+        """
+        Kill the process launched to process the file, and ensure consistent state.
+        """
+        if self._process is None:
+            raise AirflowException("Tried to kill before starting!")
+        # The queue will likely get corrupted, so remove the reference
+        self._result_queue = None
+        self._kill_process()
+        self._manager.shutdown()
+
+    def _kill_process(self):
+        if self._process.is_alive():
             self.log.warning("Killing PID %s", self._process.pid)
             os.kill(self._process.pid, signal.SIGKILL)
 
@@ -1582,12 +1598,15 @@ class SchedulerJob(BaseJob):
                                     pickle_dags,
                                     self.dag_ids)
 
+        processor_timeout_seconds = conf.getint('core', 'dagbag_import_timeout')
+        processor_timeout = datetime.timedelta(seconds=processor_timeout_seconds)
         processor_manager = DagFileProcessorManager(self.subdir,
                                                     known_file_paths,
                                                     self.max_threads,
                                                     self.file_process_interval,
                                                     self.num_runs,
-                                                    processor_factory)
+                                                    processor_factory,
+                                                    processor_timeout)
 
         try:
             self._execute_helper(processor_manager)
