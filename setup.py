@@ -280,7 +280,7 @@ def do_setup():
             'flask-login>=0.3, <0.5',
             'flask-swagger==0.2.13',
             'flask-wtf>=0.14.2, <0.15',
-            'funcsigs==1.0.0',
+            'funcsigs>=1.0.0, <2.0.0',
             'future>=0.16.0, <0.17',
             'gitpython>=2.0.2',
             'gunicorn>=19.4.0, <20.0',
