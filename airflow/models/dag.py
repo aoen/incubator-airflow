@@ -1490,7 +1490,7 @@ class DagModel(Base, LoggingMixin):
             # the path the webserver uses when it tries to trigger a DAG does not match the
             # existing scheduler path and the DAG can not be found.
             # Also, fix for render code on UI by changing "/code" in views.py
-            path_regex = "airflow_scheduler-.-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[" \
+            path_regex = "airflow_scheduler.*-.-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[" \
                          "0-9a-f]{12}/runs/.*/sandbox/airflow_home"
             path_split = re.split(path_regex, self.fileloc)[1]
             return os.environ.get("AIRFLOW_HOME") + path_split
